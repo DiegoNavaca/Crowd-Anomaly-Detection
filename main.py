@@ -25,7 +25,7 @@ def printDelaunay(graph, img, message = "Delaunay Triangulation", color = (0,255
 RLOF = cv.optflow.SparseRLOFOpticalFlow_create()
 
 # The video feed is read in as a VideoCapture object
-cap = cv.VideoCapture("Crowd-Activity-All.avi")
+cap = cv.VideoCapture("./Datasets/UMN/Crowd-Activity-All.avi")
 
 # ret = a boolean return value from getting the frame, first_frame = the first frame in the entire video sequence
 ret, prev_frame = cap.read()
@@ -47,10 +47,10 @@ while(cap.isOpened()):
     
     # # Calculates sparse optical flow by Lucas-Kanade method
     # # https://docs.opencv.org/3.0-beta/modules/video/doc/motion_analysis_and_object_tracking.html#calcopticalflowpyrlk
-    #nex, status, error = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev, None)#, **lk_params)
+    nex, status, error = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev, None)
     
     #RLOF
-    nex, status, error = RLOF.calc(prev_frame, frame, prev, None)#, forwardBackwardThreshold = 0.1)
+    #nex, status, error = RLOF.calc(prev_frame, frame, prev, None)
 
     # Selects good feature points for previous position
     if(len(prev.shape) == 3):
