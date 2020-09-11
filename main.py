@@ -38,14 +38,15 @@ def addDelaunayToImage(graph, img, color = (0,255,0), width = 1):
             cv.line(img, pt2, pt3, color, width)
             cv.line(img, pt1, pt3, color, width)
 
-def addTrayectoriesToImage(trayectories, status, img, color = (0,0,255), width = 1):
+def addTrayectoriesToImage(trayectories, img, color = (0,0,255), width = 1):
     for i, (tracklet) in enumerate(trayectories):
-        if(i < len(status) and status[i] == 1):
-            prev = tracklet[0]
-            for i in range(1,len(tracklet)):
-                nex = tracklet[i]
-                cv.line(img, prev, nex, color, width)
-                prev = nex
+        prev = tracklet[0]
+        prev = (int(prev[0]),int(prev[1]))
+        for i in range(1,len(tracklet)):
+            nex = tracklet[i]
+            nex = (int(nex[0]),int(nex[1]))
+            cv.line(img, prev, nex, color, width)
+            prev = nex
 
 ##################################################################
 
@@ -132,7 +133,7 @@ while(cap.isOpened()):
     
         # Opens a new window and displays the output frame
         addDelaunayToImage(delaunay,frame)
-        addTrayectoriesToImage(trayectories, status ,frame)
+        addTrayectoriesToImage(trayectories ,frame)
 
     cv.imshow("Crowd", frame)
     
