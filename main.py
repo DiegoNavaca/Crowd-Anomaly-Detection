@@ -15,9 +15,26 @@ def direction(pt0,pt1):
     dif = (pt0[0]-pt1[0],pt0[1]-pt1[1])
     return np.arctan2(dif[1],dif[0])
 
+def calculateCliques(grafo, features):
+    n_aristas = len(grafo.getEdgeList())
+    cliques = [[point] for point in range(len(features))]
+    for i in range(0,n_aristas):
+        # For every edge we get the origin and destination
+        # and add them to the clique of both vertex
+        origen, aux = grafo.edgeOrg(i)
+        destino, aux = grafo.edgeDst(i)
+        # We have to discount the first 4 vertex that make the bounding box
+        origen -= 4
+        destino -= 4
+        if( origen >= 0 and destino >= 0):
+            cliques[origen].append(destino)
+            cliques[destino].append(origen)
+        
+    return cliques
+
 ############# METRICS #############
 
-def calculateVelocity(features, trayectories, min_motion = 1.0):
+def calculateMovement(features, trayectories, min_motion = 1.0):
     static_features = []
     velocity = []
     # We calculate the total length of every trayectory
@@ -67,8 +84,31 @@ def calculateDirectionVar(trayectories):
         d_var /= len(tracklet)
         direction_variation.append(d_var)
 
-        return direction_variation
+    return direction_variation
 
+def calculateCollectiveness(cliques, trayectories):
+    # Initialization
+    collectiveness = [0 for vector in trayectories]
+    # For every feature point
+    for k in range(len(cliques)):
+        # We average the angular diference between the motion vector of every point with its neighbours
+        for i in range(len(cliques[k])):
+            collectiveness[k] = np.abs(direction(trayectories[k][0], trayectories[k][-1]) - direction(trayectories[i][0], trayectories[i][-1]))
+        collectiveness[k] /= len(cliques[k])
+
+    return collectiveness
+
+def calculateDensity(cliques,features, bandwidth = 0.5):
+    # Bandwidth = Bandwidth of the 2D Gaussian Kernel
+    n_features = len(cliques)
+    density = [0 for i in range(n_features)]
+    for i in range(n_features):
+        for j in range(1,len(cliques[i])):
+            density[i] += np.exp(-1 * ( euDistance(features[i][0], features[cliques[i][j]][0]) ) / 2*bandwidth**2)
+        density[i] /= np.sqrt(2*np.pi)*bandwidth
+        
+    return density
+    
 ########### IMAGE VISUALIZATION ###########
 
 def addDelaunayToImage(graph, img, color = (0,255,0), width = 1):
@@ -92,6 +132,15 @@ def addTrayectoriesToImage(trayectories, img, color = (0,0,255), width = 1):
             cv.line(img, prev, nex, color, width)
             prev = nex
 
+def addCliqueToImage(cliques, index, img, features, color = (255,0,0)):
+    point = features[index].ravel()
+    point = (int(point[0]), int(point[1]))
+    cv.circle(img,point,2,(255,0,155),4)
+    for i in range(1,len(cliques[index])):
+        point = features[cliques[index][i]].ravel()
+        point = (int(point[0]), int(point[1]))
+        cv.circle(img,point,1,color,2)
+            
 ##################################################################
 
 np.random.seed(1) 
@@ -103,7 +152,7 @@ RLOF = cv.optflow.SparseRLOFOpticalFlow_create()
 
 #FAST algorithm for feature detection
 fast = cv.FastFeatureDetector_create()
-fast.setThreshold(30)
+fast.setThreshold(25)
 
 # The video feed is read in as a VideoCapture object
 cap = cv.VideoCapture("./Datasets/UMN/Crowd-Activity-All.avi")
@@ -135,10 +184,10 @@ while(cap.isOpened()):
     if(it % L == 0):
         it = 0
         #Metrics analysis
-        # Static Features Filter
-        prev, velocity = calculateVelocity(prev,trayectories, min_motion)
+        # Individual Behaviours
+        prev, velocity = calculateMovement(prev,trayectories, min_motion)
         dir_var = calculateDirectionVar(trayectories)
-        
+                
         # Delaunay representation
         rect = (0, 0, frame.shape[1], frame.shape[0])
         delaunay.initDelaunay(rect)
@@ -148,9 +197,16 @@ while(cap.isOpened()):
             if(imgContains(frame,(a,b))):
                 delaunay.insert((a,b))
 
+        cliques = calculateCliques(delaunay, prev)
+
+        # Interactive Behaviours
+        collectiveness = calculateCollectiveness(cliques,trayectories)
+        density = calculateDensity(cliques,prev)
+
         # Image representation for checking results
         addTrayectoriesToImage(trayectories,frame)
         addDelaunayToImage(delaunay,frame)
+        #addCliqueToImage(cliques, 0, frame,prev)
         cv.imshow("Crowd", frame)
         
         #Beginning of a new set of trayectories
