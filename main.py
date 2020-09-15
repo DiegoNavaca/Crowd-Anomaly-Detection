@@ -15,22 +15,34 @@ def direction(pt0,pt1):
     dif = (pt0[0]-pt1[0],pt0[1]-pt1[1])
     return np.arctan2(dif[1],dif[0])
 
-def calculateCliques(grafo, features):
-    n_aristas = len(grafo.getEdgeList())
+def difAng(v0,v1):
+    dif = np.abs(direction(v0[0], v0[-1]) - direction(v1[0], v1[-1]))
+    if dif > np.pi:
+        dif = 2*np.pi-dif
+    return dif
+
+def getCliques(grafo, features):
+    n_aristas = len(grafo.getEdgeList())*2
     cliques = [[point] for point in range(len(features))]
     for i in range(0,n_aristas):
         # For every edge we get the origin and destination
         # and add them to the clique of both vertex
-        origen, aux = grafo.edgeOrg(i)
-        destino, aux = grafo.edgeDst(i)
+        origen, aux = grafo.edgeOrg(i*2)
+        destino, aux = grafo.edgeDst(i*2)
         # We have to discount the first 4 vertex that make the bounding box
         origen -= 4
         destino -= 4
         if( origen >= 0 and destino >= 0):
             cliques[origen].append(destino)
-            cliques[destino].append(origen)
+            cliques[destino].append(origen)        
         
     return cliques
+
+def getClusters(features):
+    clusters = []
+    #cv.flann.hierarchicalClustering(features,)
+
+    return clusters
 
 ############# METRICS #############
 
@@ -92,11 +104,23 @@ def calculateCollectiveness(cliques, trayectories):
     # For every feature point
     for k in range(len(cliques)):
         # We average the angular diference between the motion vector of every point with its neighbours
-        for i in range(len(cliques[k])):
-            collectiveness[k] = np.abs(direction(trayectories[k][0], trayectories[k][-1]) - direction(trayectories[i][0], trayectories[i][-1]))
+        for i in range(1,len(cliques[k])):
+            collectiveness[k] += difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[cliques[k][i]][0],trayectories[cliques[k][i]][-1]))
         collectiveness[k] /= len(cliques[k])
 
     return collectiveness
+
+def calculateConflict(cliques, trayectories):
+    # Initialization
+    conflict = [0 for vector in trayectories]
+    # For every feature point
+    for k in range(len(cliques)):
+        # We average quotient of the angular diference between the motion vector of every point with its neighbours and their distances
+        for i in range(1,len(cliques[k])):
+            conflict[k] += difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[cliques[k][i]][0],trayectories[cliques[k][i]][-1])) / euDistance(trayectories[k][-1], trayectories[cliques[k][i]][-1])
+        conflict[k] /= len(cliques[k])
+
+    return conflict
 
 def calculateDensity(cliques,features, bandwidth = 0.5):
     # Bandwidth = Bandwidth of the 2D Gaussian Kernel
@@ -197,16 +221,17 @@ while(cap.isOpened()):
             if(imgContains(frame,(a,b))):
                 delaunay.insert((a,b))
 
-        cliques = calculateCliques(delaunay, prev)
+        cliques = getCliques(delaunay, prev)
 
         # Interactive Behaviours
         collectiveness = calculateCollectiveness(cliques,trayectories)
+        conflict = calculateConflict(cliques,trayectories)
         density = calculateDensity(cliques,prev)
 
         # Image representation for checking results
         addTrayectoriesToImage(trayectories,frame)
         addDelaunayToImage(delaunay,frame)
-        #addCliqueToImage(cliques, 0, frame,prev)
+        #addCliqueToImage(cliques, -1, frame,prev)
         cv.imshow("Crowd", frame)
         
         #Beginning of a new set of trayectories
