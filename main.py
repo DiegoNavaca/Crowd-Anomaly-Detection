@@ -1,5 +1,6 @@
 import cv2 as cv
 import numpy as np
+from sklearn.cluster import AffinityPropagation
 
 def imgContains(img,pt):
     if pt[0] >= 0 and pt[0] < frame.shape[1] and pt[1] >= 0 and pt[1] < frame.shape[0]:
@@ -21,28 +22,108 @@ def difAng(v0,v1):
         dif = 2*np.pi-dif
     return dif
 
+def areaTriangle(pt0,pt1,pt2):
+    #Area of the triangle (x2 for a better efficiency)
+    area = pt0[0] * (pt1[1] - pt2[1]) + pt1[0] * (pt2[1] - pt0[1]) + pt2[0] * (pt0[1] - pt1[0])
+    
+    return area
+
+def getPointsCrossRatio(pt0,pt1,pt2):
+    # Mid-point
+    mid02 = ((pt2[0]+pt0[0]) / 2, (pt2[1]+pt0[1]) / 2)
+    mid12 = ((pt2[0]+pt1[0]) / 2, (pt2[1]+pt1[1]) / 2)
+
+    # Base and mid-point vectors
+    e01 = (pt1[0] - pt0[0], pt1[1] - pt0[1])
+    e002 = (mid02[0] - pt0[0], mid02[1] - pt0[1])
+    e012 = (mid12[0] - pt0[0], mid12[1] - pt0[1])
+
+    # Dot product
+    dot02 = np.dot(e01,e002)
+    dot12 = np.dot(e01,e012)
+
+    # Distances and angles
+    dst01 = euDistance(pt0, pt1)
+    dst002 = euDistance(pt0, mid02)
+    dst012 = euDistance(pt0, mid12)
+    cos02 = dot02 / (dst01 * dst002)
+    cos12 = dot12 / (dst01 * dst012)
+
+    # Distance of the proyection to pt0
+    dst_pr02 = cos02 * dst002
+    dst_pr12 = cos12 * dst012
+
+    # Proyection of the midpoints onto the base
+    proy02 = (pt0[0] + (dst_pr02 * e01[0]) / dst01,  pt0[1] + (dst_pr02 * e01[1]) / dst01)
+    proy12 = (pt0[0] + (dst_pr12 * e01[0]) / dst01,  pt0[1] + (dst_pr12 * e01[1]) / dst01)
+
+    return pt0, proy02, proy12, pt1
+    
+def crossRatioTriangle(tri,tr0,tr1):
+    p1, p2, p3, p4 = getPointsCrossRatio(tr0,tr1,tri)
+
+    cr = euDistance(p1,p3)*euDistance(p2,p4) / euDistance(p1,p4)*euDistance(p2,p3)
+
+    return cr
+
+def distanceTriangles(old, new):
+    # Area
+    old_area = areaTriangle(old[0], old[1], old[2])
+    new_area = areaTriangle(new[0], new[1], new[2])
+    diff_area = old_area - new_area
+
+    # Cross ratio
+    if(old_area > 0 and new_area > 0):
+        diff_cr = crossRatioTriangle(old[0], old[1], old[2]) - crossRatioTriangle(new[0], new[1], new[2])
+        if np.isnan(diff_cr):
+            exit()
+    else:
+        diff_cr = 1
+
+    return np.abs(diff_area)*np.abs(diff_cr)
+
 def getCliques(grafo, features):
-    n_aristas = len(grafo.getEdgeList())*2
+    n_aristas = len(grafo.getEdgeList())
     cliques = [[point] for point in range(len(features))]
-    for i in range(0,n_aristas):
+    limit = n_aristas
+    i = 0
+    while i < limit:
         # For every edge we get the origin and destination
         # and add them to the clique of both vertex
-        origen, aux = grafo.edgeOrg(i*2)
-        destino, aux = grafo.edgeDst(i*2)
+        origen, aux = grafo.edgeOrg(i*4) # Odd positions have origin and destination 0
+        destino, aux = grafo.edgeDst(i*4) # Also, edges are duplicated (one for every orientation)
         # We have to discount the first 4 vertex that make the bounding box
         origen -= 4
         destino -= 4
         if( origen >= 0 and destino >= 0):
             cliques[origen].append(destino)
-            cliques[destino].append(origen)        
+            cliques[destino].append(origen)
+        i += 1
         
     return cliques
 
 def getClusters(features):
-    clusters = []
-    #cv.flann.hierarchicalClustering(features,)
-
+    features = [item[0] for item in features]
+    clusters = AffinityPropagation(random_state = 1, copy = False).fit_predict(features)
+    
     return clusters
+
+# Function to add new features to an existing array
+# Can be used for a more stable graph but execution time increases 
+def addFeatures(prev_features, new_features, accuracy = 5.0):
+    add = [1 for f in new_features]
+    for k in range(len(new_features)):
+        for i in range(len(prev_features)):
+            if np.abs(new_features[k][0] - prev_features[i][0][0]) < accuracy and np.abs(new_features[k][1] - prev_features[i][0][1]) < accuracy:
+                add[k] = 0
+                break
+
+    new_features = new_features[np.nonzero(add)]
+    if(len(new_features) == 0):
+        return prev_features
+    new_features = new_features.reshape(-1, 1, 2)
+            
+    return np.append(prev_features,new_features, axis = 0)
 
 ############# METRICS #############
 
@@ -98,6 +179,21 @@ def calculateDirectionVar(trayectories):
 
     return direction_variation
 
+def calculateStability(cliques, trayectories):
+    stability = [0 for f in trayectories]
+    # For every tracklet
+    for i in range(len(trayectories)):
+        # We calculate  the change of size and shape of all the posible triangles in the clique 
+        for j in range(1,len(cliques[i])):
+            for k in range(j+1,len(cliques[i])):
+                old_triangle = (trayectories[i][0],trayectories[cliques[i][j]][0], trayectories[cliques[i][k]][0])
+                new_triangle = (trayectories[i][-1],trayectories[cliques[i][j]][-1], trayectories[cliques[i][k]][-1])
+                stability[i] += distanceTriangles(old_triangle, new_triangle)
+        stability[i] /= len(cliques[i])
+
+    return stability
+            
+
 def calculateCollectiveness(cliques, trayectories):
     # Initialization
     collectiveness = [0 for vector in trayectories]
@@ -132,19 +228,43 @@ def calculateDensity(cliques,features, bandwidth = 0.5):
         density[i] /= np.sqrt(2*np.pi)*bandwidth
         
     return density
+
+def calculateUniformity(cliques, clusters, features):
+    #Initialization 
+    uniformity = [0 for i in range(max(clusters)+1)]
+    inter_cluster = [0 for i in uniformity]
+    intra_cluster = inter_cluster.copy()
+    total_sum = 0
+    dist_matrix = [[-1 for f2 in features] for f1 in features]
+
+    # For every pair of point in each clique
+    for f in range(len(features)):
+        for q in range(1,len(cliques[f])):
+            # We measure the distance if we have to
+            if dist_matrix[f][cliques[f][q]] == -1:
+                    dist_matrix[f][cliques[f][q]] = euDistance(features[f][0], features[cliques[f][q]][0])
+                    dist_matrix[cliques[f][q]][f] = dist_matrix[f][cliques[f][q]]
+            # We follow the formula for the uniformity of each cluster
+            if(clusters[f] == clusters[cliques[f][q]]):
+                intra_cluster[clusters[f]] += 1 / dist_matrix[f][cliques[f][q]]
+            else:
+                inter_cluster[clusters[f]] += 1 / dist_matrix[f][cliques[f][q]]
+            total_sum += 1 / dist_matrix[f][cliques[f][q]]
+
+    for i in range(len(uniformity)):
+        uniformity[i] = (intra_cluster / total_sum) - (inter_cluster / total_sum)**2
+            
+    return uniformity
     
 ########### IMAGE VISUALIZATION ###########
 
 def addDelaunayToImage(graph, img, color = (0,255,0), width = 1):
-    triangles = graph.getTriangleList()
+    triangles = graph.getEdgeList()
     for t in triangles:
         pt1 = (int(t[0]), int(t[1]))
         pt2 = (int(t[2]), int(t[3]))
-        pt3 = (int(t[4]), int(t[5]))
-        if(imgContains(img,pt1) and imgContains(img,pt2) and imgContains(img,pt3)):
+        if(imgContains(img,pt1) and imgContains(img,pt2)):
             cv.line(img, pt1, pt2, color, width)
-            cv.line(img, pt2, pt3, color, width)
-            cv.line(img, pt1, pt3, color, width)
 
 def addTrayectoriesToImage(trayectories, img, color = (0,0,255), width = 1):
     for i, (tracklet) in enumerate(trayectories):
@@ -156,18 +276,26 @@ def addTrayectoriesToImage(trayectories, img, color = (0,0,255), width = 1):
             cv.line(img, prev, nex, color, width)
             prev = nex
 
-def addCliqueToImage(cliques, index, img, features, color = (255,0,0)):
-    point = features[index].ravel()
+def addCliqueToImage(cliques, index, img, trayectories, tr_index = -1, color = (255,0,0)):
+    point = trayectories[index][tr_index]
     point = (int(point[0]), int(point[1]))
     cv.circle(img,point,2,(255,0,155),4)
     for i in range(1,len(cliques[index])):
-        point = features[cliques[index][i]].ravel()
+        point = trayectories[cliques[index][i]][tr_index]
         point = (int(point[0]), int(point[1]))
         cv.circle(img,point,1,color,2)
+
+def addClustersToImage(clusters, features, img):
+    n_clusters = max(clusters)+1
+    for i in range(len(clusters)):
+        point = features[i].ravel()
+        point = (int(point[0]), int(point[1]))
+        color = 255 * (clusters[i]+1) / n_clusters
+        cv.circle(img,point,1,(color,0,color),2)
             
 ##################################################################
 
-np.random.seed(1) 
+#np.random.seed(1) 
 
 # Parameters for RLOF
 RLOF = cv.optflow.SparseRLOFOpticalFlow_create()
@@ -176,7 +304,7 @@ RLOF = cv.optflow.SparseRLOFOpticalFlow_create()
 
 #FAST algorithm for feature detection
 fast = cv.FastFeatureDetector_create()
-fast.setThreshold(25)
+fast.setThreshold(35)
 
 # The video feed is read in as a VideoCapture object
 cap = cv.VideoCapture("./Datasets/UMN/Crowd-Activity-All.avi")
@@ -189,7 +317,7 @@ delaunay = cv.Subdiv2D()
 
 it = 0
 L = 5  #Refresh rate
-min_motion = 0.4 #Min length allowed for a trayectory
+min_motion = 0.2 #Min length allowed for a trayectory
 
 # Feature detection
 prev_key = fast.detect(prev_frame,None)
@@ -205,40 +333,52 @@ while(cap.isOpened()):
     it += 1
     
     # We calculate the metrics and begin a new set of trayectories every L frames
-    if(it % L == 0):
+    if(it >= L):
         it = 0
+        
         #Metrics analysis
         # Individual Behaviours
         prev, velocity = calculateMovement(prev,trayectories, min_motion)
         dir_var = calculateDirectionVar(trayectories)
-                
-        # Delaunay representation
-        rect = (0, 0, frame.shape[1], frame.shape[0])
-        delaunay.initDelaunay(rect)
+
+        if len(prev) > 0:
+            # Delaunay representation
+            rect = (0, 0, frame.shape[1], frame.shape[0])
+            delaunay.initDelaunay(rect)
         
-        for point in prev:
-            a, b = point.ravel()
-            if(imgContains(frame,(a,b))):
-                delaunay.insert((a,b))
+            for point in prev:
+                a, b = point.ravel()
+                if(imgContains(frame,(a,b))):
+                    delaunay.insert((a,b))
 
-        cliques = getCliques(delaunay, prev)
+            cliques = getCliques(delaunay, prev)
 
-        # Interactive Behaviours
-        collectiveness = calculateCollectiveness(cliques,trayectories)
-        conflict = calculateConflict(cliques,trayectories)
-        density = calculateDensity(cliques,prev)
-
-        # Image representation for checking results
-        addTrayectoriesToImage(trayectories,frame)
-        addDelaunayToImage(delaunay,frame)
-        #addCliqueToImage(cliques, -1, frame,prev)
-        cv.imshow("Crowd", frame)
+            # Interactive Behaviours
+            stability = calculateStability(cliques,trayectories)
+            collectiveness = calculateCollectiveness(cliques,trayectories)
+            conflict = calculateConflict(cliques,trayectories)
+            density = calculateDensity(cliques,prev)
+            clusters = getClusters(prev)
+            if(clusters[0] != -1):
+                uniformity = calculateUniformity(cliques, clusters, prev)
+    
+            # Image representation for checking results
+            #addTrayectoriesToImage(trayectories,frame)
+            addDelaunayToImage(delaunay,frame)
+            #addCliqueToImage(cliques, 1, frame,trayectories)
+            #addClustersToImage(clusters,prev,frame)
+            cv.imshow("Crowd", frame)
         
         #Beginning of a new set of trayectories
         # Feature detection
+        # new_key = fast.detect(prev_frame,None)
+        # new = cv.KeyPoint_convert(new_key)
+        # prev = addFeatures(prev,new,10.0)
+
         prev_key = fast.detect(prev_frame,None)
         prev = cv.KeyPoint_convert(prev_key)
-        prev = prev.reshape(-1, 1, 2)
+        prev = prev.reshape(-1,1,2)        
+        
         # Trayectories initialization
         trayectories = []
         for p in prev:
