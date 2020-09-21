@@ -1,6 +1,8 @@
 import cv2 as cv
 import numpy as np
 from sklearn.cluster import AffinityPropagation
+from sklearn.cluster import DBSCAN
+import time
 
 def imgContains(img,pt):
     if pt[0] >= 0 and pt[0] < frame.shape[1] and pt[1] >= 0 and pt[1] < frame.shape[0]:
@@ -104,7 +106,8 @@ def getCliques(grafo, features):
 
 def getClusters(features):
     features = [item[0] for item in features]
-    clusters = AffinityPropagation(random_state = 1, copy = False).fit_predict(features)
+    #clusters = AffinityPropagation(random_state = 1, copy = False).fit_predict(features)
+    clusters = DBSCAN(eps=10, min_samples=3).fit_predict(features)
     
     return clusters
 
@@ -361,7 +364,7 @@ while(cap.isOpened()):
             clusters = getClusters(prev)
             if(clusters[0] != -1):
                 uniformity = calculateUniformity(cliques, clusters, prev)
-    
+
             # Image representation for checking results
             #addTrayectoriesToImage(trayectories,frame)
             addDelaunayToImage(delaunay,frame)
