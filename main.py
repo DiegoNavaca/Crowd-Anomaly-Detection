@@ -30,7 +30,7 @@ def areaTriangle(pt0,pt1,pt2):
     
     return area
 
-def getPointsCrossRatio(pt0,pt1,pt2):
+def crossRatioTriangle(pt2,pt0,pt1):
     # Mid-point
     mid02 = ((pt2[0]+pt0[0]) / 2, (pt2[1]+pt0[1]) / 2)
     mid12 = ((pt2[0]+pt1[0]) / 2, (pt2[1]+pt1[1]) / 2)
@@ -48,23 +48,18 @@ def getPointsCrossRatio(pt0,pt1,pt2):
     dst01 = euDistance(pt0, pt1)
     dst002 = euDistance(pt0, mid02)
     dst012 = euDistance(pt0, mid12)
-    cos02 = dot02 / (dst01 * dst002)
-    cos12 = dot12 / (dst01 * dst012)
+    if (dst01 * dst002 * dst012 > 0):
+        cos02 = dot02 / (dst01 * dst002)
+        cos12 = dot12 / (dst01 * dst012)
+    else:
+        return 0
 
     # Distance of the proyection to pt0
     dst_pr02 = cos02 * dst002
     dst_pr12 = cos12 * dst012
 
-    # Proyection of the midpoints onto the base
-    proy02 = (pt0[0] + (dst_pr02 * e01[0]) / dst01,  pt0[1] + (dst_pr02 * e01[1]) / dst01)
-    proy12 = (pt0[0] + (dst_pr12 * e01[0]) / dst01,  pt0[1] + (dst_pr12 * e01[1]) / dst01)
-
-    return pt0, proy02, proy12, pt1
-    
-def crossRatioTriangle(tri,tr0,tr1):
-    p1, p2, p3, p4 = getPointsCrossRatio(tr0,tr1,tri)
-
-    cr = euDistance(p1,p3)*euDistance(p2,p4) / euDistance(p1,p4)*euDistance(p2,p3)
+    # Cross ratio calculation
+    cr = dst_pr12*(dst01 - dst_pr02) / dst01*(dst_pr12-dst_pr02)
 
     return cr
 
@@ -77,8 +72,6 @@ def distanceTriangles(old, new):
     # Cross ratio
     if(old_area > 0 and new_area > 0):
         diff_cr = crossRatioTriangle(old[0], old[1], old[2]) - crossRatioTriangle(new[0], new[1], new[2])
-        if np.isnan(diff_cr):
-            exit()
     else:
         diff_cr = 1
 
@@ -307,7 +300,7 @@ RLOF = cv.optflow.SparseRLOFOpticalFlow_create()
 
 #FAST algorithm for feature detection
 fast = cv.FastFeatureDetector_create()
-fast.setThreshold(35)
+fast.setThreshold(25)
 
 # The video feed is read in as a VideoCapture object
 cap = cv.VideoCapture("./Datasets/UMN/Crowd-Activity-All.avi")
@@ -341,6 +334,7 @@ while(cap.isOpened()):
         
         #Metrics analysis
         # Individual Behaviours
+        start = time.time()
         prev, velocity = calculateMovement(prev,trayectories, min_motion)
         dir_var = calculateDirectionVar(trayectories)
 
@@ -362,8 +356,8 @@ while(cap.isOpened()):
             conflict = calculateConflict(cliques,trayectories)
             density = calculateDensity(cliques,prev)
             clusters = getClusters(prev)
-            if(clusters[0] != -1):
-                uniformity = calculateUniformity(cliques, clusters, prev)
+            uniformity = calculateUniformity(cliques, clusters, prev)
+            print(time.time()-start)
 
             # Image representation for checking results
             #addTrayectoriesToImage(trayectories,frame)
