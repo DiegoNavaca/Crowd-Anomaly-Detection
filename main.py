@@ -294,7 +294,7 @@ def addClustersToImage(clusters, features, img):
 #np.random.seed(1) 
 
 # Parameters for RLOF
-RLOF = cv.optflow.SparseRLOFOpticalFlow_create()
+#RLOF = cv.optflow.SparseRLOFOpticalFlow_create()
 #RLOF_Param = cv.optflow.RLOFOpticalFlowParameter_create()
 #RLOF.setRLOFOpticalFlowParameter(RLOF_Param)
 
@@ -303,7 +303,8 @@ fast = cv.FastFeatureDetector_create()
 fast.setThreshold(25)
 
 # The video feed is read in as a VideoCapture object
-cap = cv.VideoCapture("./Datasets/UMN/Crowd-Activity-All.avi")
+cap = cv.VideoCapture("./Datasets/UMN/Original UMN.avi")
+#cap = cv.VideoCapture("./Datasets/Crowd Violence Detection/fans_violence__English_Hooligans_vs_Turkey_Ultras__Vandal83__J8S2-pGz8ao.avi")
 
 # ret = a boolean return value from getting the frame, first_frame = the first frame in the entire video sequence
 ret, prev_frame = cap.read()
@@ -324,7 +325,7 @@ trayectories = []
 for p in prev:
     a, b = p.ravel()
     trayectories.append([(a,b)])
-
+    
 while(cap.isOpened()):
     it += 1
     
@@ -334,7 +335,6 @@ while(cap.isOpened()):
         
         #Metrics analysis
         # Individual Behaviours
-        start = time.time()
         prev, velocity = calculateMovement(prev,trayectories, min_motion)
         dir_var = calculateDirectionVar(trayectories)
 
@@ -357,7 +357,6 @@ while(cap.isOpened()):
             density = calculateDensity(cliques,prev)
             clusters = getClusters(prev)
             uniformity = calculateUniformity(cliques, clusters, prev)
-            print(time.time()-start)
 
             # Image representation for checking results
             #addTrayectoriesToImage(trayectories,frame)
@@ -374,7 +373,7 @@ while(cap.isOpened()):
 
         prev_key = fast.detect(prev_frame,None)
         prev = cv.KeyPoint_convert(prev_key)
-        prev = prev.reshape(-1,1,2)        
+        prev = prev.reshape(-1,1,2)
         
         # Trayectories initialization
         trayectories = []
@@ -388,6 +387,7 @@ while(cap.isOpened()):
     # # Calculates sparse optical flow by Lucas-Kanade method
     # # https://docs.opencv.org/3.0-beta/modules/video/doc/motion_analysis_and_object_tracking.html#calcopticalflowpyrlk
     nex, status, error = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev, None)
+    aux, status, back_error = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex, prev)
         
     #RLOF
     #nex, status, error = RLOF.calc(prev_frame, frame, prev, None)
