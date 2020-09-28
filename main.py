@@ -3,6 +3,7 @@ import numpy as np
 from sklearn.cluster import AffinityPropagation
 from sklearn.cluster import DBSCAN
 import time
+from collections import namedtuple
 
 def imgContains(img,pt):
     if pt[0] >= 0 and pt[0] < frame.shape[1] and pt[1] >= 0 and pt[1] < frame.shape[0]:
@@ -78,22 +79,20 @@ def distanceTriangles(old, new):
     return np.abs(diff_area)*np.abs(diff_cr)
 
 def getCliques(grafo, features):
-    n_aristas = len(grafo.getEdgeList())
-    cliques = [[point] for point in range(len(features))]
-    limit = n_aristas
-    i = 0
-    while i < limit:
+    edges = grafo.getEdgeList()
+    point = namedtuple("point", ["x", "y"])
+    points = {point(int(features[i][0][0]),int(features[i][0][1])):i for i in range(len(features))}        
+    cliques = [[p] for p in range(len(features))]
+    for e in edges:
         # For every edge we get the origin and destination
         # and add them to the clique of both vertex
-        origen, aux = grafo.edgeOrg(i*4) # Odd positions have origin and destination 0
-        destino, aux = grafo.edgeDst(i*4) # Also, edges are duplicated (one for every orientation)
-        # We have to discount the first 4 vertex that make the bounding box
-        origen -= 4
-        destino -= 4
-        if( origen >= 0 and destino >= 0):
+        origen = point(int(e[0]),int(e[1]))
+        destino = point(int(e[2]),int(e[3]))
+        if origen in points and destino in points:
+            origen = points[origen]
+            destino = points[destino]
             cliques[origen].append(destino)
             cliques[destino].append(origen)
-        i += 1
         
     return cliques
 
@@ -361,7 +360,7 @@ while(cap.isOpened()):
             # Image representation for checking results
             #addTrayectoriesToImage(trayectories,frame)
             addDelaunayToImage(delaunay,frame)
-            #addCliqueToImage(cliques, 1, frame,trayectories)
+            #addCliqueToImage(cliques, -1, frame,trayectories)
             #addClustersToImage(clusters,prev,frame)
             cv.imshow("Crowd", frame)
         
