@@ -81,13 +81,13 @@ def distanceTriangles(old, new):
 def getCliques(grafo, features):
     edges = grafo.getEdgeList()
     point = namedtuple("point", ["x", "y"])
-    points = {point(int(features[i][0][0]),int(features[i][0][1])):i for i in range(len(features))}        
+    points = {point(features[i][0][0],features[i][0][1]):i for i in range(len(features))}        
     cliques = [[p] for p in range(len(features))]
     for e in edges:
         # For every edge we get the origin and destination
         # and add them to the clique of both vertex
-        origen = point(int(e[0]),int(e[1]))
-        destino = point(int(e[2]),int(e[3]))
+        origen = point(e[0],e[1])
+        destino = point(e[2],e[3])
         if origen in points and destino in points:
             origen = points[origen]
             destino = points[destino]
@@ -240,14 +240,14 @@ def calculateUniformity(cliques, clusters, features):
                     dist_matrix[f][cliques[f][q]] = euDistance(features[f][0], features[cliques[f][q]][0])
                     dist_matrix[cliques[f][q]][f] = dist_matrix[f][cliques[f][q]]
             # We follow the formula for the uniformity of each cluster
-            if(clusters[f] == clusters[cliques[f][q]]):
-                intra_cluster[clusters[f]] += 1 / dist_matrix[f][cliques[f][q]]
-            else:
-                inter_cluster[clusters[f]] += 1 / dist_matrix[f][cliques[f][q]]
-            total_sum += 1 / dist_matrix[f][cliques[f][q]]
+            if(f != cliques[f][q]):
+                if(clusters[f] == clusters[cliques[f][q]]):
+                    intra_cluster[clusters[f]] += 1 / dist_matrix[f][cliques[f][q]]
+                else:
+                    inter_cluster[clusters[f]] += 1 / dist_matrix[f][cliques[f][q]]
+                total_sum += 1 / dist_matrix[f][cliques[f][q]]
 
-    for i in range(len(uniformity)):
-        uniformity[i] = (intra_cluster / total_sum) - (inter_cluster / total_sum)**2
+    uniformity = (intra_cluster / total_sum) - (inter_cluster / total_sum)**2
             
     return uniformity
     
@@ -335,9 +335,11 @@ while(cap.isOpened()):
         #Metrics analysis
         # Individual Behaviours
         prev, velocity = calculateMovement(prev,trayectories, min_motion)
+        vel_hist = np.histogram(velocity, bins = 16, range = (0,prev.shape[0]//L))[0] #
         dir_var = calculateDirectionVar(trayectories)
+        dir_hist = np.histogram(dir_var, bins = 16, range = (0,3))[0]  #
 
-        if len(prev) > 0:
+        if len(prev) > 2:
             # Delaunay representation
             rect = (0, 0, frame.shape[1], frame.shape[0])
             delaunay.initDelaunay(rect)
@@ -347,21 +349,33 @@ while(cap.isOpened()):
                 if(imgContains(frame,(a,b))):
                     delaunay.insert((a,b))
 
+            start = time.time()
             cliques = getCliques(delaunay, prev)
 
             # Interactive Behaviours
             stability = calculateStability(cliques,trayectories)
+            stab_hist = np.histogram(stability, bins = 16, range = (0,1000))[0]
+            
             collectiveness = calculateCollectiveness(cliques,trayectories)
+            coll_hist = np.histogram(collectiveness, bins = 16, range = (0,2))[0]
+            
             conflict = calculateConflict(cliques,trayectories)
+            con_hist = np.histogram(conflict, bins = 16, range = (0,2))[0]
+            
             density = calculateDensity(cliques,prev)
+            dens_hist = np.histogram(density, bins = 16, range = (0,4))[0]
+            
             clusters = getClusters(prev)
             uniformity = calculateUniformity(cliques, clusters, prev)
+            uni_hist = np.histogram(uniformity, bins = 16, range = (0,1))[0]  #
 
             # Image representation for checking results
             #addTrayectoriesToImage(trayectories,frame)
             addDelaunayToImage(delaunay,frame)
             #addCliqueToImage(cliques, -1, frame,trayectories)
             #addClustersToImage(clusters,prev,frame)
+            if frame.shape[0] < 512:
+                frame = cv.resize(frame,(512,int(512*frame.shape[0]/frame.shape[1])))
             cv.imshow("Crowd", frame)
         
         #Beginning of a new set of trayectories
