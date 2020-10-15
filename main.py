@@ -2,6 +2,7 @@ import cv2 as cv
 import numpy as np
 from sklearn.cluster import AffinityPropagation
 from sklearn.cluster import DBSCAN
+from sklearn.preprocessing import normalize
 import time
 from collections import namedtuple
 
@@ -106,12 +107,14 @@ def getClusters(features):
 # Function to add new features to an existing array
 # Can be used for a more stable graph but execution time increases 
 def addFeatures(prev_features, new_features, accuracy = 5.0):
+    grid = prev_features // accuracy
+    point = namedtuple("point", ["x", "y"])
+    points = frozenset(point(grid[i][0][0],grid[i][0][1]) for i in range(len(grid)))
     add = [1 for f in new_features]
     for k in range(len(new_features)):
-        for i in range(len(prev_features)):
-            if np.abs(new_features[k][0] - prev_features[i][0][0]) < accuracy and np.abs(new_features[k][1] - prev_features[i][0][1]) < accuracy:
-                add[k] = 0
-                break
+        p = point(new_features[k][0] // accuracy, new_features[k][1] // accuracy)
+        if p in points:
+            add[k] = 0
 
     new_features = new_features[np.nonzero(add)]
     if(len(new_features) == 0):
@@ -299,11 +302,9 @@ def addClustersToImage(clusters, features, img):
 
 #FAST algorithm for feature detection
 fast = cv.FastFeatureDetector_create()
-fast.setThreshold(25)
-
+fast.setThreshold(20)
 # The video feed is read in as a VideoCapture object
 cap = cv.VideoCapture("./Datasets/UMN/Original UMN.avi")
-#cap = cv.VideoCapture("./Datasets/Crowd Violence Detection/fans_violence__English_Hooligans_vs_Turkey_Ultras__Vandal83__J8S2-pGz8ao.avi")
 
 # ret = a boolean return value from getting the frame, first_frame = the first frame in the entire video sequence
 ret, prev_frame = cap.read()
@@ -312,7 +313,7 @@ ret, prev_frame = cap.read()
 delaunay = cv.Subdiv2D()
 
 it = 0
-L = 5  #Refresh rate
+L = 4  #Refresh rate
 min_motion = 0.2 #Min length allowed for a trayectory
 
 # Feature detection
@@ -329,13 +330,13 @@ while(cap.isOpened()):
     it += 1
     
     # We calculate the metrics and begin a new set of trayectories every L frames
-    if(it >= L):
-        it = 0
+    if(it % L == 0):
         
         #Metrics analysis
         # Individual Behaviours
         prev, velocity = calculateMovement(prev,trayectories, min_motion)
         vel_hist = np.histogram(velocity, bins = 16, range = (0,prev.shape[0]//L))[0] #
+        
         dir_var = calculateDirectionVar(trayectories)
         dir_hist = np.histogram(dir_var, bins = 16, range = (0,3))[0]  #
 
@@ -349,7 +350,6 @@ while(cap.isOpened()):
                 if(imgContains(frame,(a,b))):
                     delaunay.insert((a,b))
 
-            start = time.time()
             cliques = getCliques(delaunay, prev)
 
             # Interactive Behaviours
@@ -369,6 +369,9 @@ while(cap.isOpened()):
             uniformity = calculateUniformity(cliques, clusters, prev)
             uni_hist = np.histogram(uniformity, bins = 16, range = (0,1))[0]  #
 
+            descriptors = [dir_hist,vel_hist,stab_hist,coll_hist,con_hist,dens_hist,uni_hist]
+            descriptors = normalize(descriptors)
+
             # Image representation for checking results
             #addTrayectoriesToImage(trayectories,frame)
             addDelaunayToImage(delaunay,frame)
@@ -380,9 +383,10 @@ while(cap.isOpened()):
         
         #Beginning of a new set of trayectories
         # Feature detection
+        # print(len(prev))
         # new_key = fast.detect(prev_frame,None)
         # new = cv.KeyPoint_convert(new_key)
-        # prev = addFeatures(prev,new,10.0)
+        # prev = addFeatures(prev,new,15)
 
         prev_key = fast.detect(prev_frame,None)
         prev = cv.KeyPoint_convert(prev_key)
@@ -400,7 +404,7 @@ while(cap.isOpened()):
     # # Calculates sparse optical flow by Lucas-Kanade method
     # # https://docs.opencv.org/3.0-beta/modules/video/doc/motion_analysis_and_object_tracking.html#calcopticalflowpyrlk
     nex, status, error = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev, None)
-    aux, status, back_error = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex, prev)
+    aux, status, error = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex, prev)
         
     #RLOF
     #nex, status, error = RLOF.calc(prev_frame, frame, prev, None)
@@ -412,7 +416,7 @@ while(cap.isOpened()):
         for i in range(len(status)-1, -1, -1):
             if status[i] == 0:
                 del trayectories[i]
-        
+                
         # Selects good feature points for nex position
         good_new = nex[status == 1]
         
