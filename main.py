@@ -1,13 +1,20 @@
 import cv2 as cv
 import numpy as np
-from sklearn.cluster import AffinityPropagation
 from sklearn.cluster import DBSCAN
-from sklearn.preprocessing import normalize
+from sklearn.svm import OneClassSVM
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import roc_auc_score
 import time
 from collections import namedtuple
+from glob import glob
+import joblib
+
+def string_To_List(s):
+    lista = s[1:-2].split(", ")
+    return [float(i) for i in lista]
 
 def imgContains(img,pt):
-    if pt[0] >= 0 and pt[0] < frame.shape[1] and pt[1] >= 0 and pt[1] < frame.shape[0]:
+    if pt[0] >= 0 and pt[0] < img.shape[1] and pt[1] >= 0 and pt[1] < img.shape[0]:
         return True
     else:
         return False
@@ -99,7 +106,6 @@ def getCliques(grafo, features):
 
 def getClusters(features):
     features = [item[0] for item in features]
-    #clusters = AffinityPropagation(random_state = 1, copy = False).fit_predict(features)
     clusters = DBSCAN(eps=10, min_samples=3).fit_predict(features)
     
     return clusters
@@ -251,8 +257,9 @@ def calculateUniformity(cliques, clusters, features):
                 total_sum += 1 / dist_matrix[f][cliques[f][q]]
 
     uniformity = (intra_cluster / total_sum) - (inter_cluster / total_sum)**2
-            
-    return uniformity
+
+    # We return a list to keep consistency with the rest of the descriptors
+    return list(uniformity)
     
 ########### IMAGE VISUALIZATION ###########
 
@@ -291,151 +298,280 @@ def addClustersToImage(clusters, features, img):
         color = 255 * (clusters[i]+1) / n_clusters
         cv.circle(img,point,1,(color,0,color),2)
             
-##################################################################
+#################### DESCRIPTORS ###########################
 
-#np.random.seed(1) 
+# Function to extract the descriptors of a video
+def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion = 0.05, fast_threshold = 10):
+    #FAST algorithm for feature detection
+    fast = cv.FastFeatureDetector_create()
+    fast.setThreshold(fast_threshold)
+    # The video feed is read in as a VideoCapture object
+    cap = cv.VideoCapture(video_file)
 
-# Parameters for RLOF
-#RLOF = cv.optflow.SparseRLOFOpticalFlow_create()
-#RLOF_Param = cv.optflow.RLOFOpticalFlowParameter_create()
-#RLOF.setRLOFOpticalFlowParameter(RLOF_Param)
+    # ret = a boolean return value from getting the frame, first_frame = the first frame in the entire video sequence
+    video_open, prev_frame = cap.read()
 
-#FAST algorithm for feature detection
-fast = cv.FastFeatureDetector_create()
-fast.setThreshold(20)
-# The video feed is read in as a VideoCapture object
-cap = cv.VideoCapture("./Datasets/UMN/Original UMN.avi")
+    # Delaunay Subdivision Function
+    delaunay = cv.Subdiv2D()
 
-# ret = a boolean return value from getting the frame, first_frame = the first frame in the entire video sequence
-ret, prev_frame = cap.read()
+    file = open(out_file,"a")
 
-# Delaunay Subdivision Function
-delaunay = cv.Subdiv2D()
+    it = 0
 
-it = 0
-L = 4  #Refresh rate
-min_motion = 0.2 #Min length allowed for a trayectory
+    # Feature detection
+    prev_key = fast.detect(prev_frame,None)
+    prev_aux = cv.KeyPoint_convert(prev_key)
+    prev_aux = prev_aux.reshape(-1, 1, 2)
 
-# Feature detection
-prev_key = fast.detect(prev_frame,None)
-prev = cv.KeyPoint_convert(prev_key)
-prev = prev.reshape(-1, 1, 2)
-# Trayectories initialization
-trayectories = []
-for p in prev:
-    a, b = p.ravel()
-    trayectories.append([(a,b)])
+    # Trayectories initialization
+    trayectories_aux = []
+    trayectories = []
+    for p in prev_aux:
+        a, b = p.ravel()
+        trayectories_aux.append([(a,b)])
     
-while(cap.isOpened()):
-    it += 1
-    
-    # We calculate the metrics and begin a new set of trayectories every L frames
-    if(it % L == 0):
-        
-        #Metrics analysis
-        # Individual Behaviours
-        prev, velocity = calculateMovement(prev,trayectories, min_motion)
-        vel_hist = np.histogram(velocity, bins = 16, range = (0,prev.shape[0]//L))[0] #
-        
-        dir_var = calculateDirectionVar(trayectories)
-        dir_hist = np.histogram(dir_var, bins = 16, range = (0,3))[0]  #
+    while(video_open):
+        it += 1
 
-        if len(prev) > 2:
-            # Delaunay representation
-            rect = (0, 0, frame.shape[1], frame.shape[0])
-            delaunay.initDelaunay(rect)
-        
-            for point in prev:
-                a, b = point.ravel()
-                if(imgContains(frame,(a,b))):
-                    delaunay.insert((a,b))
-
-            cliques = getCliques(delaunay, prev)
-
-            # Interactive Behaviours
-            stability = calculateStability(cliques,trayectories)
-            stab_hist = np.histogram(stability, bins = 16, range = (0,1000))[0]
+        if(it % L == 0):
+            # Feature detection
+            prev = prev_aux.copy()
+            prev_key = fast.detect(prev_frame,None)
+            prev_aux = cv.KeyPoint_convert(prev_key)
+            prev_aux = prev_aux.reshape(-1, 1, 2)
             
-            collectiveness = calculateCollectiveness(cliques,trayectories)
-            coll_hist = np.histogram(collectiveness, bins = 16, range = (0,2))[0]
+            trayectories = trayectories_aux.copy()
+            trayectories_aux = []
+            for p in prev_aux:
+                a, b = p.ravel()
+                trayectories_aux.append([(a,b)])
+        
+        # We calculate the metrics and begin a new set of trayectories every L frames
+        if(it >= L):
+            #Metrics analysis
+            # Individual Behaviours
+            prev, velocity = calculateMovement(prev,trayectories, min_motion*L)
+            #vel_hist = np.histogram(velocity, bins = 16, range = (0,prev.shape[0]//L))[0] #
+        
+            dir_var = calculateDirectionVar(trayectories)
+            #dir_hist = np.histogram(dir_var, bins = 16, range = (0,3))[0]  #
+
+            if len(prev) > 2:
+                # Delaunay representation
+                rect = (0, 0, prev_frame.shape[1], prev_frame.shape[0])
+                delaunay.initDelaunay(rect)
+        
+                for point in prev:
+                    a, b = point.ravel()
+                    if(imgContains(frame,(a,b))):
+                        delaunay.insert((a,b))
+
+                cliques = getCliques(delaunay, prev)
+
+                # Interactive Behaviours
+                stability = calculateStability(cliques,trayectories)
             
-            conflict = calculateConflict(cliques,trayectories)
-            con_hist = np.histogram(conflict, bins = 16, range = (0,2))[0]
+                collectiveness = calculateCollectiveness(cliques,trayectories)
             
-            density = calculateDensity(cliques,prev)
-            dens_hist = np.histogram(density, bins = 16, range = (0,4))[0]
+                conflict = calculateConflict(cliques,trayectories)
             
-            clusters = getClusters(prev)
-            uniformity = calculateUniformity(cliques, clusters, prev)
-            uni_hist = np.histogram(uniformity, bins = 16, range = (0,1))[0]  #
-
-            descriptors = [dir_hist,vel_hist,stab_hist,coll_hist,con_hist,dens_hist,uni_hist]
-            descriptors = normalize(descriptors)
-
-            # Image representation for checking results
-            #addTrayectoriesToImage(trayectories,frame)
-            addDelaunayToImage(delaunay,frame)
-            #addCliqueToImage(cliques, -1, frame,trayectories)
-            #addClustersToImage(clusters,prev,frame)
-            if frame.shape[0] < 512:
-                frame = cv.resize(frame,(512,int(512*frame.shape[0]/frame.shape[1])))
-            cv.imshow("Crowd", frame)
-        
-        #Beginning of a new set of trayectories
-        # Feature detection
-        # print(len(prev))
-        # new_key = fast.detect(prev_frame,None)
-        # new = cv.KeyPoint_convert(new_key)
-        # prev = addFeatures(prev,new,15)
-
-        prev_key = fast.detect(prev_frame,None)
-        prev = cv.KeyPoint_convert(prev_key)
-        prev = prev.reshape(-1,1,2)
-        
-        # Trayectories initialization
-        trayectories = []
-        for p in prev:
-            a, b = p.ravel()
-            trayectories.append([(a,b)])
-    
-    #ret = a boolean return value from getting the frame, frame = the current frame being projected in the video
-    ret, frame = cap.read()
-    
-    # # Calculates sparse optical flow by Lucas-Kanade method
-    # # https://docs.opencv.org/3.0-beta/modules/video/doc/motion_analysis_and_object_tracking.html#calcopticalflowpyrlk
-    nex, status, error = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev, None)
-    aux, status, error = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex, prev)
-        
-    #RLOF
-    #nex, status, error = RLOF.calc(prev_frame, frame, prev, None)
-
-    if status is not None:
-        
-        # Selects good feature points for previous position
-        good_old = prev[status == 1]
-        for i in range(len(status)-1, -1, -1):
-            if status[i] == 0:
-                del trayectories[i]
+                density = calculateDensity(cliques,prev)
+            
+                clusters = getClusters(prev)
+                uniformity = calculateUniformity(cliques, clusters, prev)
                 
-        # Selects good feature points for nex position
-        good_new = nex[status == 1]
+                file.write(str(velocity)+"\n")
+                file.write(str(dir_var)+"\n")
+                file.write(str(stability)+"\n")
+                file.write(str(collectiveness)+"\n")
+                file.write(str(conflict)+"\n")
+                file.write(str(density)+"\n")
+                file.write(str(uniformity)+"\n")
+                
+
+                # Image representation for checking results
+                #addTrayectoriesToImage(trayectories,frame)
+                #addDelaunayToImage(delaunay,frame)
+                #addCliqueToImage(cliques, -1, frame,trayectories)
+                #addClustersToImage(clusters,prev,frame)
+                #if frame.shape[0] < 512:
+                #    frame = cv.resize(frame,(512,int(512*frame.shape[0]/frame.shape[1])))
+                cv.imshow("Crowd", frame)            
         
-        for i, (new) in enumerate(good_new):
-            # Adds the new coordinates to the graph and the trayectories
-            a, b = new.ravel()
-            if(imgContains(frame,(a,b))):
-                trayectories[i].append((a,b))
+        #ret = a boolean return value from getting the frame, frame = the current frame being projected in the video
+        video_open, frame = cap.read()
+
+        if video_open:
+            # # Calculates sparse optical flow by Lucas-Kanade method
+            # # https://docs.opencv.org/3.0-beta/modules/video/doc/motion_analysis_and_object_tracking.html#calcopticalflowpyrlk
+            if (it > L) :
+                if len(prev) > 0:
+                    nex, status, error = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev, None)
+                    aux, status, error = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex, prev)
+        
+                    # Selects good feature points for previous position
+                    good_old = prev[status == 1]
+                    for i in range(len(status)-1, -1, -1):
+                        if status[i] == 0:
+                            del trayectories[i]
+                
+                    # Selects good feature points for nex position
+                    good_new = nex[status == 1]
+        
+                    for i, (new) in enumerate(good_new):
+                        # Adds the new coordinates to the graph and the trayectories
+                        a, b = new.ravel()
+                        if(imgContains(frame,(a,b))):
+                            trayectories[i].append((a,b))
+                            del trayectories[i][0]                            
     
-        # Updates previous frame
-        prev_frame = frame.copy()
+                    # Updates previous good feature points
+                    prev = good_new.reshape(-1, 1, 2)
+
+            nex_aux, status_aux, error = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev_aux, None)
+            aux, status_aux, error = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex_aux, prev_aux)
+
+            if status_aux is not None:
+        
+                # Selects good feature points for previous position
+                good_old = prev_aux[status_aux == 1]
+                for i in range(len(status_aux)-1, -1, -1):
+                    if status_aux[i] == 0:
+                        del trayectories_aux[i]
+                
+                # Selects good feature points for nex position
+                good_new = nex_aux[status_aux == 1]
+        
+                for i, (new) in enumerate(good_new):
+                    # Adds the new coordinates to the graph and the trayectories
+                    a, b = new.ravel()
+                    if(imgContains(frame,(a,b))):
+                        trayectories_aux[i].append((a,b))
+        
+                # Updates previous good feature points
+                prev_aux = good_new.reshape(-1, 1, 2)
+
+                # Updates previous frame
+                prev_frame = frame.copy()
     
-        # Updates previous good feature points
-        prev = good_new.reshape(-1, 1, 2)        
+        # Frames are read by intervals of 10 milliseconds. The programs breaks out of the while loop when the user presses the 'q' key
+        if cv.waitKey(10) & 0xFF == ord('q'):
+            break
+
+    # The following frees up resources and closes all windows
+    cap.release()
+    cv.destroyAllWindows()
+    file.close()
+
+# Function to get the descriptors of a set of training videos and store them on a single file
+def get_Training_Descriptors(path,out_file = "training_descriptors"):
+    # We reset the file if it exists
+    f = open(out_file,"w")
+    f.close()
+    # We get the name of all the files in the directory
+    training_files = glob(path+"*")
+    for file in training_files:
+        extract_descriptors(file,out_file)
+        print(file,": DONE",sep = "")
+
+# Function to search for the maximun values of each descriptor on training 
+def get_Max_Descriptors(des_file, n_descriptors = 7):
+    # Max value of every descriptor on training
+    maximos = [0 for i in range(n_descriptors)]
+    i = 0
+    f = open(des_file)
+    line = f.readline()
+    while line:
+        lista = string_To_List(line)
+        aux = max(lista)
+        if aux > maximos[i]:
+            maximos[i] = aux
+        # Descriptors are stored in sequential order so we have to rotate in each iteration
+        i = (i+1) % n_descriptors
+        
+        line = f.readline()
+    f.close()
+
+    return maximos
+
+################## ONE CLASS SVM #####################
+
+# Function to get the normalized histograms of a set of descriptors 
+def get_Histograms(des_file, range_max, n_descriptors = 7):
+    f = open(des_file)
+    histograms = [[] for i in range(n_descriptors)]
+    i = 0
+    line = f.readline()
+    while line:
+        lista = string_To_List(line)
+        h = np.histogram(lista, bins = 16, range = (0,range_max[i]))[0]
+        norm = np.linalg.norm(h)
+        if norm != 0:
+            histograms[i].append(h / np.linalg.norm(h))
+        else:
+            histograms[i].append(h)
+        
+        i = (i+1) % n_descriptors
+        line = f.readline()
+
+    histograms = [np.concatenate(x) for x in zip(*histograms)]
+        
+    return histograms
     
-    # Frames are read by intervals of 10 milliseconds. The programs breaks out of the while loop when the user presses the 'q' key
-    if cv.waitKey(10) & 0xFF == ord('q'):
-        break
+def train_OC_SVM(samples, out_file = "svm.plk"):
+    svm = OneClassSVM(nu =0.001, kernel = "sigmoid", coef0 = 0.30).fit(samples)
+    real = [1 for i in range(len(samples))]
+    predicted = svm.predict(samples)
+
+    joblib.dump(svm, out_file)
+
+def test_OC_SVM(samples,in_file = "svm.plk"):
+    svm = joblib.load(in_file)
+
+    return svm.predict(samples)
+
+################################################################
     
-# The following frees up resources and closes all windows
-cap.release()
-cv.destroyAllWindows()
+
+np.random.seed(5)
+
+start = time.time()
+get_Training_Descriptors("Datasets/UMN/Training/Escena 1/","Training Descriptors/escena1_tra_descriptors")
+f = open("Full Video Descriptors/v1","w")
+f.close()
+extract_descriptors("Datasets/UMN/Escenas Completas/Escena 1/UMN1.mp4", "Full Video Descriptors/v1")
+print("Video 1: DONE")
+
+f = open("Full Video Descriptors/v2","w")
+f.close()
+extract_descriptors("Datasets/UMN/Escenas Completas/Escena 1/UMN2.mp4", "Full Video Descriptors/v2")
+print("Video 2: DONE")
+
+range_max = get_Max_Descriptors("Training Descriptors/escena1_tra_descriptors")
+hist = get_Histograms("Training Descriptors/escena1_tra_descriptors", range_max)
+train_OC_SVM(hist)
+
+hist = get_Histograms("Full Video Descriptors/v1", range_max)
+labels = [1 if i < 484 else -1 for i in range(len(hist))]
+predicted_1 = test_OC_SVM(hist)
+#print(predicted)
+total = len(hist)
+score = accuracy_score(labels,predicted_1,normalize = False)
+all_labels = labels.copy()
+
+print(score,"-",total)
+
+hist = get_Histograms("Full Video Descriptors/v2", range_max)
+labels = [1 if i < 666 else -1 for i in range(len(hist))]
+predicted_2 = test_OC_SVM(hist)
+#print(predicted)
+total += len(hist)
+score = accuracy_score(labels,predicted_2,normalize = False)
+
+all_labels = all_labels + labels
+all_predictions = np.concatenate((predicted_1,predicted_2))
+
+print(accuracy_score(all_labels,all_predictions))
+print(roc_auc_score(all_labels,all_predictions))
+
+print(time.time()-start)
