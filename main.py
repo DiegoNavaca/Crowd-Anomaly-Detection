@@ -16,16 +16,16 @@ def string_To_List(s):
     lista = s[1:-2].split(", ")
     return [float(i) for i in lista]
 
-@jit(nopython = True)
+@jit(nogil = True)
 def imgContains(img,pt):
     return ( pt[0] >= 0 and pt[0] < img.shape[1] and pt[1] >= 0 and pt[1] < img.shape[0] )
 
-@jit(nopython = True)
+@jit(nogil = True)
 def direction(pt0,pt1):
     dif = pt0-pt1
     return np.arctan2(dif[1],dif[0])
 
-@jit(nopython = True)
+@jit(nogil = True)
 def difAng(v0,v1):
     dif = np.abs(direction(v0[0], v0[-1]) - direction(v1[0], v1[-1]))
     if dif > np.pi:
@@ -33,11 +33,11 @@ def difAng(v0,v1):
     return dif
 
 # Calculates the area of a triangle (x2 for a better efficiency)
-@jit(nopython = True)
+@jit(nogil = True)
 def areaTriangle(pt0,pt1,pt2):
     return ( pt0[0] * (pt1[1] - pt2[1]) + pt1[0] * (pt2[1] - pt0[1]) + pt2[0] * (pt0[1] - pt1[0]) )
 
-@jit( nopython = True)
+@jit( nogil = True)
 def crossRatioTriangle(pt2,pt0,pt1):
     # Mid-point
     mid02 = (pt0+pt2) / 2
@@ -56,7 +56,7 @@ def crossRatioTriangle(pt2,pt0,pt1):
     dst01 = np.linalg.norm(pt0-pt1)
     dst002 = np.linalg.norm(pt0-mid02)
     dst012 = np.linalg.norm(pt0-mid12)
-    if (dst01 == 0 and dst002 == 0 and dst012 == 0):
+    if (dst01 != 0 and dst002 != 0 and dst012 != 0):
         cos02 = dot02 / (dst01 * dst002)
         cos12 = dot12 / (dst01 * dst012)
         
@@ -71,7 +71,7 @@ def crossRatioTriangle(pt2,pt0,pt1):
 
     return cr
 
-@jit( nopython = True)
+@jit( nogil = True)
 def distanceTriangles(old, new):
     # Area
     old_area = areaTriangle(old[0], old[1], old[2])
@@ -86,7 +86,6 @@ def distanceTriangles(old, new):
 
     return np.abs(diff_area)*np.abs(diff_cr)
 
-@jit( nopython = True)
 def getCliques(grafo, features):
     edges = grafo.getEdgeList()
     point = namedtuple("point", ["x", "y"])
