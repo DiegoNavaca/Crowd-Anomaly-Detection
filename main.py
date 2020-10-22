@@ -104,9 +104,9 @@ def getCliques(grafo, features):
         
     return cliques
 
-def getClusters(features):
+def getClusters(features, mini = 2):
     features = [item[0] for item in features]
-    clusters = DBSCAN(eps=10, min_samples=3).fit_predict(features)
+    clusters = DBSCAN(eps=10, min_samples=mini).fit_predict(features)
     
     return clusters
 
@@ -183,14 +183,14 @@ def calculateDirectionVar(trayectories):
 
     return direction_variation
 
-def calculateStability(cliques, trayectories):
+def calculateStability(cliques, trayectories, t2 = -2):
     stability = [0 for f in trayectories]
     # For every tracklet
     for i in range(len(trayectories)):
         # We calculate  the change of size and shape of all the posible triangles in the clique 
         for j in range(1,len(cliques[i])):
             for k in range(j+1,len(cliques[i])):
-                old_triangle = (trayectories[i][0],trayectories[cliques[i][j]][0], trayectories[cliques[i][k]][0])
+                old_triangle = (trayectories[i][t2],trayectories[cliques[i][j]][t2], trayectories[cliques[i][k]][t2])
                 new_triangle = (trayectories[i][-1],trayectories[cliques[i][j]][-1], trayectories[cliques[i][k]][-1])
                 stability[i] += distanceTriangles(old_triangle, new_triangle)
         stability[i] /= len(cliques[i])
@@ -235,7 +235,7 @@ def calculateDensity(cliques,features, bandwidth = 0.5):
 
 def calculateUniformity(cliques, clusters, features):
     #Initialization 
-    uniformity = [0 for i in range(max(clusters)+1)]
+    uniformity = [0 for i in range(max(max(clusters)+1,1))]
     inter_cluster = [0 for i in uniformity]
     intra_cluster = inter_cluster.copy()
     total_sum = 0
@@ -301,7 +301,7 @@ def addClustersToImage(clusters, features, img):
 #################### DESCRIPTORS ###########################
 
 # Function to extract the descriptors of a video
-def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion = 0.05, fast_threshold = 10):
+def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion = 0.025, fast_threshold = 20):
     #FAST algorithm for feature detection
     fast = cv.FastFeatureDetector_create()
     fast.setThreshold(fast_threshold)
@@ -376,9 +376,10 @@ def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion 
                 conflict = calculateConflict(cliques,trayectories)
             
                 density = calculateDensity(cliques,prev)
-            
+
                 clusters = getClusters(prev)
                 uniformity = calculateUniformity(cliques, clusters, prev)
+                
                 
                 file.write(str(velocity)+"\n")
                 file.write(str(dir_var)+"\n")
@@ -474,14 +475,26 @@ def get_Training_Descriptors(path,out_file = "training_descriptors"):
         extract_descriptors(file,out_file)
         print(file,": DONE",sep = "")
 
+# Function to get the descriptors of a set of training videos and store them on a single file
+def get_Test_Descriptors(path,out_path = "./"):
+    # We get the name of all the files in the directory
+    test_files = glob(path+"*")
+    i = 1
+    for file in test_files:
+        # We reset the file if it exists
+        f = open(out_path+str(i),"w")
+        f.close()
+        extract_descriptors(file,out_path+str(i))
+        i += 1
+        print(file,": DONE",sep = "")
+
 # Function to search for the maximun values of each descriptor on training 
 def get_Max_Descriptors(des_file, n_descriptors = 7):
     # Max value of every descriptor on training
     maximos = [0 for i in range(n_descriptors)]
     i = 0
     f = open(des_file)
-    line = f.readline()
-    while line:
+    for line in f:
         lista = string_To_List(line)
         aux = max(lista)
         if aux > maximos[i]:
@@ -489,7 +502,6 @@ def get_Max_Descriptors(des_file, n_descriptors = 7):
         # Descriptors are stored in sequential order so we have to rotate in each iteration
         i = (i+1) % n_descriptors
         
-        line = f.readline()
     f.close()
 
     return maximos
@@ -501,8 +513,7 @@ def get_Histograms(des_file, range_max, n_descriptors = 7):
     f = open(des_file)
     histograms = [[] for i in range(n_descriptors)]
     i = 0
-    line = f.readline()
-    while line:
+    for line in f:
         lista = string_To_List(line)
         h = np.histogram(lista, bins = 16, range = (0,range_max[i]))[0]
         norm = np.linalg.norm(h)
@@ -512,17 +523,13 @@ def get_Histograms(des_file, range_max, n_descriptors = 7):
             histograms[i].append(h)
         
         i = (i+1) % n_descriptors
-        line = f.readline()
 
     histograms = [np.concatenate(x) for x in zip(*histograms)]
         
     return histograms
     
 def train_OC_SVM(samples, out_file = "svm.plk"):
-    svm = OneClassSVM(nu =0.001, kernel = "sigmoid", coef0 = 0.30).fit(samples)
-    real = [1 for i in range(len(samples))]
-    predicted = svm.predict(samples)
-
+    svm = OneClassSVM(nu =0.01, kernel = "sigmoid", coef0 = 0.15).fit(samples)
     joblib.dump(svm, out_file)
 
 def test_OC_SVM(samples,in_file = "svm.plk"):
@@ -537,41 +544,42 @@ np.random.seed(5)
 
 start = time.time()
 get_Training_Descriptors("Datasets/UMN/Training/Escena 1/","Training Descriptors/escena1_tra_descriptors")
-f = open("Full Video Descriptors/v1","w")
-f.close()
-extract_descriptors("Datasets/UMN/Escenas Completas/Escena 1/UMN1.mp4", "Full Video Descriptors/v1")
-print("Video 1: DONE")
-
-f = open("Full Video Descriptors/v2","w")
-f.close()
-extract_descriptors("Datasets/UMN/Escenas Completas/Escena 1/UMN2.mp4", "Full Video Descriptors/v2")
-print("Video 2: DONE")
+#get_Training_Descriptors("Datasets/UMN/Training/Escena 2/","Training Descriptors/escena2_tra_descriptors")
+#get_Training_Descriptors("Datasets/UMN/Training/Escena 3/","Training Descriptors/escena3_tra_descriptors")
+get_Test_Descriptors("Datasets/UMN/Escenas Completas/Escena 1/","Full Video Descriptors/Escena 1/")
 
 range_max = get_Max_Descriptors("Training Descriptors/escena1_tra_descriptors")
 hist = get_Histograms("Training Descriptors/escena1_tra_descriptors", range_max)
+print(time.time()-start)
 train_OC_SVM(hist)
 
-hist = get_Histograms("Full Video Descriptors/v1", range_max)
-labels = [1 if i < 484 else -1 for i in range(len(hist))]
+hist = get_Histograms("Full Video Descriptors/Escena 1/1", range_max)
+labels = [1 if i < 666 else -1 for i in range(len(hist))]
 predicted_1 = test_OC_SVM(hist)
-#print(predicted)
-total = len(hist)
 score = accuracy_score(labels,predicted_1,normalize = False)
 all_labels = labels.copy()
 
-print(score,"-",total)
+print(score,"-",len(hist))
 
-hist = get_Histograms("Full Video Descriptors/v2", range_max)
-labels = [1 if i < 666 else -1 for i in range(len(hist))]
+hist = get_Histograms("Full Video Descriptors/Escena 1/2", range_max)
+labels = [1 if i < 484 else -1 for i in range(len(hist))]
 predicted_2 = test_OC_SVM(hist)
-#print(predicted)
-total += len(hist)
 score = accuracy_score(labels,predicted_2,normalize = False)
+all_labels += labels
 
-all_labels = all_labels + labels
+print(score,"-",len(hist))
+
 all_predictions = np.concatenate((predicted_1,predicted_2))
 
-print(accuracy_score(all_labels,all_predictions))
-print(roc_auc_score(all_labels,all_predictions))
+print("Accuracy:",accuracy_score(all_labels,all_predictions))
+print("AUC:",roc_auc_score(all_labels,all_predictions))
 
 print(time.time()-start)
+
+#L = 5
+#mm = 0.025
+#772 - 805
+#597 - 609
+#Accuracy: 0.9681753889674681
+#AUC: 0.9775164690382082
+
