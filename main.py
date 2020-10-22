@@ -9,16 +9,14 @@ from collections import namedtuple
 from glob import glob
 import joblib
 
+# Transforms a string into a list if it has the correct representation (faster than eval())
 def string_To_List(s):
     lista = s[1:-2].split(", ")
     return [float(i) for i in lista]
 
 def imgContains(img,pt):
-    if pt[0] >= 0 and pt[0] < img.shape[1] and pt[1] >= 0 and pt[1] < img.shape[0]:
-        return True
-    else:
-        return False
-
+    return ( pt[0] >= 0 and pt[0] < img.shape[1] and pt[1] >= 0 and pt[1] < img.shape[0] )
+    
 def euDistance(pt0,pt1):
     dif = (pt0[0]-pt1[0],pt0[1]-pt1[1])
     return np.linalg.norm(dif)
@@ -33,12 +31,10 @@ def difAng(v0,v1):
         dif = 2*np.pi-dif
     return dif
 
+# Calculates the area of a triangle (x2 for a better efficiency)
 def areaTriangle(pt0,pt1,pt2):
-    #Area of the triangle (x2 for a better efficiency)
-    area = pt0[0] * (pt1[1] - pt2[1]) + pt1[0] * (pt2[1] - pt0[1]) + pt2[0] * (pt0[1] - pt1[0])
+    return ( pt0[0] * (pt1[1] - pt2[1]) + pt1[0] * (pt2[1] - pt0[1]) + pt2[0] * (pt0[1] - pt1[0]) )
     
-    return area
-
 def crossRatioTriangle(pt2,pt0,pt1):
     # Mid-point
     mid02 = ((pt2[0]+pt0[0]) / 2, (pt2[1]+pt0[1]) / 2)
@@ -104,9 +100,9 @@ def getCliques(grafo, features):
         
     return cliques
 
-def getClusters(features, mini = 2):
+def getClusters(features, mini = 2, e = 10):
     features = [item[0] for item in features]
-    clusters = DBSCAN(eps=10, min_samples=mini).fit_predict(features)
+    clusters = DBSCAN(eps=e, min_samples=mini).fit_predict(features)
     
     return clusters
 
@@ -199,38 +195,52 @@ def calculateStability(cliques, trayectories, t2 = -2):
             
 
 def calculateCollectiveness(cliques, trayectories):
-    # Initialization
-    collectiveness = [0 for vector in trayectories]
-    # For every feature point
-    for k in range(len(cliques)):
-        # We average the angular diference between the motion vector of every point with its neighbours
-        for i in range(1,len(cliques[k])):
-            collectiveness[k] += difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[cliques[k][i]][0],trayectories[cliques[k][i]][-1]))
-        collectiveness[k] /= len(cliques[k])
+    collectiveness = [sum(
+        difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[cliques[k][i]][0],trayectories[cliques[k][i]][-1])) for i in range(1,len(cliques[k]))
+    ) / len(cliques[k]) for k in range(len(cliques))]
+    
+    # # Initialization
+    # collectiveness = [0 for vector in trayectories]
+    # # For every feature point
+    # for k in range(len(cliques)):
+    #     # We average the angular diference between the motion vector of every point with its neighbours
+    #     for i in range(1,len(cliques[k])):
+    #         collectiveness[k] += difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[cliques[k][i]][0],trayectories[cliques[k][i]][-1]))
+    #     collectiveness[k] /= len(cliques[k])
 
     return collectiveness
 
 def calculateConflict(cliques, trayectories):
-    # Initialization
-    conflict = [0 for vector in trayectories]
-    # For every feature point
-    for k in range(len(cliques)):
-        # We average quotient of the angular diference between the motion vector of every point with its neighbours and their distances
-        for i in range(1,len(cliques[k])):
-            conflict[k] += difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[cliques[k][i]][0],trayectories[cliques[k][i]][-1])) / euDistance(trayectories[k][-1], trayectories[cliques[k][i]][-1])
-        conflict[k] /= len(cliques[k])
+    conflict = [sum(
+    difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[cliques[k][i]][0],trayectories[cliques[k][i]][-1]))
+        / euDistance(trayectories[k][-1], trayectories[cliques[k][i]][-1]) for i in range(1,len(cliques[k]))
+    ) / len(cliques[k]) for k in range(len(cliques))]
+   
+    # # Initialization
+    # conflict = [0 for vector in trayectories]
+    # # For every feature point
+    # for k in range(len(cliques)):
+    #     # We average quotient of the angular diference between the motion vector of every point with its neighbours and their distances
+    #     for i in range(1,len(cliques[k])):
+    #         conflict[k] += difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[cliques[k][i]][0],trayectories[cliques[k][i]][-1])) / euDistance(trayectories[k][-1], trayectories[cliques[k][i]][-1])
+    #     conflict[k] /= len(cliques[k])
 
     return conflict
 
 def calculateDensity(cliques,features, bandwidth = 0.5):
     # Bandwidth = Bandwidth of the 2D Gaussian Kernel
     n_features = len(cliques)
-    density = [0 for i in range(n_features)]
-    for i in range(n_features):
-        for j in range(1,len(cliques[i])):
-            density[i] += np.exp(-1 * ( euDistance(features[i][0], features[cliques[i][j]][0]) ) / 2*bandwidth**2)
-        density[i] /= np.sqrt(2*np.pi)*bandwidth
-        
+
+    density = [sum( np.exp(-1 * ( euDistance(features[i][0], features[cliques[i][j]][0]) ) / 2*bandwidth**2)
+        for j in range(1,len(cliques[i]))
+    ) / np.sqrt(2*np.pi)*bandwidth for i in range(n_features)]
+    
+    # density = [0 for i in range(n_features)]
+    # for i in range(n_features):
+    #     for j in range(1,len(cliques[i])):
+    #         density[i] += np.exp(-1 * ( euDistance(features[i][0], features[cliques[i][j]][0]) ) / 2*bandwidth**2)
+    #     density[i] /= np.sqrt(2*np.pi)*bandwidth
+
     return density
 
 def calculateUniformity(cliques, clusters, features):
