@@ -16,16 +16,29 @@ def string_To_List(s):
     lista = s[1:-2].split(", ")
     return [float(i) for i in lista]
 
-@jit(nogil = True)
+# Reads the ground truth from a file
+def get_Ground_Truth(in_file):
+    f = open(in_file)
+    gt = {}
+    for line in f:
+        lista = line.split(",")
+        # name: beginning anomaly
+        gt[lista[0]] = int(lista[1])
+
+    f.close()
+        
+    return gt
+
+@jit(nopython = True)
 def imgContains(img,pt):
     return ( pt[0] >= 0 and pt[0] < img.shape[1] and pt[1] >= 0 and pt[1] < img.shape[0] )
 
-@jit(nogil = True)
+@jit(nopython = True)
 def direction(pt0,pt1):
     dif = pt0-pt1
     return np.arctan2(dif[1],dif[0])
 
-@jit(nogil = True)
+@jit(nopython = True)
 def difAng(v0,v1):
     dif = np.abs(direction(v0[0], v0[-1]) - direction(v1[0], v1[-1]))
     if dif > np.pi:
@@ -33,11 +46,11 @@ def difAng(v0,v1):
     return dif
 
 # Calculates the area of a triangle (x2 for a better efficiency)
-@jit(nogil = True)
+@jit(nopython = True)
 def areaTriangle(pt0,pt1,pt2):
     return ( pt0[0] * (pt1[1] - pt2[1]) + pt1[0] * (pt2[1] - pt0[1]) + pt2[0] * (pt0[1] - pt1[0]) )
 
-@jit( nogil = True)
+@jit( nopython = True)
 def crossRatioTriangle(pt2,pt0,pt1):
     # Mid-point
     mid02 = (pt0+pt2) / 2
@@ -71,7 +84,7 @@ def crossRatioTriangle(pt2,pt0,pt1):
 
     return cr
 
-@jit( nogil = True)
+@jit( nopython = True)
 def distanceTriangles(old, new):
     # Area
     old_area = areaTriangle(old[0], old[1], old[2])
@@ -90,7 +103,7 @@ def getCliques(grafo, features):
     edges = grafo.getEdgeList()
     point = namedtuple("point", ["x", "y"])
     points = {point(features[i][0][0],features[i][0][1]):i for i in range(len(features))}        
-    cliques = [[p] for p in range(len(features))]
+    cliques = [[] for p in range(len(features))]
     for e in edges:
         # For every edge we get the origin and destination
         # and add them to the clique of both vertex
@@ -102,7 +115,7 @@ def getCliques(grafo, features):
             cliques[origen].append(destino)
             cliques[destino].append(origen)
         
-    return cliques
+    return np.array(cliques)
 
 def getClusters(features, mini = 2, e = 10):
     features = [item[0] for item in features]
@@ -151,7 +164,7 @@ def calculateMovement(features, trayectories, min_motion = 1.0):
             static_features.append(i)
         # else we save its velocity
         else:
-            velocity.append(motion / len(tracklet[0]))
+            velocity.append(motion / len(tracklet))
         
     #We remove the static features
     features = np.delete(features,static_features,0)
@@ -187,12 +200,12 @@ def calculateStability(cliques, trayectories, t2 = -2):
     # For every tracklet
     for i in range(len(trayectories)):
         # We calculate  the change of size and shape of all the posible triangles in the clique 
-        for j in range(1,len(cliques[i])):
+        for j in range(len(cliques[i])):
             for k in range(j+1,len(cliques[i])):
                 old_triangle = (trayectories[i][t2],trayectories[cliques[i][j]][t2], trayectories[cliques[i][k]][t2])
                 new_triangle = (trayectories[i][-1],trayectories[cliques[i][j]][-1], trayectories[cliques[i][k]][-1])
                 stability[i] = stability[i] + distanceTriangles(old_triangle, new_triangle)
-        stability[i] = stability[i] / len(cliques[i])
+        stability[i] = stability[i] / (len(cliques[i])+1)
 
     return stability
 
@@ -202,9 +215,9 @@ def calculateCollectiveness(cliques, trayectories):
     # For every feature point
     for k in range(len(cliques)):
         # We average the angular diference between the motion vector of every point with its neighbours
-        for i in range(1,len(cliques[k])):
-            collectiveness[k] += difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[cliques[k][i]][0],trayectories[cliques[k][i]][-1]))
-        collectiveness[k] /= len(cliques[k])
+        for elem in cliques[k]:
+            collectiveness[k] += difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[elem][0],trayectories[elem][-1]))
+        collectiveness[k] /= (len(cliques[k])+1)
 
     return collectiveness
 
@@ -214,11 +227,32 @@ def calculateConflict(cliques, trayectories):
     # For every feature point
     for k in range(len(cliques)):
         # We average quotient of the angular diference between the motion vector of every point with its neighbours and their distances
-        for i in range(1,len(cliques[k])):
-            conflict[k] += difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[cliques[k][i]][0],trayectories[cliques[k][i]][-1])) / np.linalg.norm(trayectories[k][-1] - trayectories[cliques[k][i]][-1])
-        conflict[k] /= len(cliques[k])
+        for elem in cliques[k]:
+            conflict[k] += difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[elem][0],trayectories[elem][-1])) / np.linalg.norm(trayectories[k][-1] - trayectories[elem][-1])
+        conflict[k] /= (len(cliques[k])+1)
 
     return conflict
+
+def calculateCollectivenessAndConflict(cliques, trayectories):
+    # Initialization
+    collectiveness = [0 for vector in trayectories]
+    conflict = collectiveness.copy()
+    # For every feature point
+    for k in range(len(cliques)):
+        # We measure collectiveness and conflict
+        for elem in cliques[k]:
+            dif = difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[elem][0],trayectories[elem][-1]))
+            collectiveness[k] += dif
+            conflict[k] += dif / np.linalg.norm(trayectories[k][-1] - trayectories[elem][-1])
+        collectiveness[k] /= (len(cliques[k])+1)
+        conflict[k] /= (len(cliques[k])+1)
+
+    return collectiveness, conflict
+
+@jit(nopython = True)
+def auxDensity(f1, f2, bandwidth):
+    v =  np.exp(-1 * ( np.linalg.norm(f1 - f2) ) / 2*bandwidth**2)
+    return v
 
 def calculateDensity(cliques,features, bandwidth = 0.5):
     # Bandwidth = Bandwidth of the 2D Gaussian Kernel
@@ -226,8 +260,9 @@ def calculateDensity(cliques,features, bandwidth = 0.5):
     
     density = [0 for i in range(n_features)]
     for i in range(n_features):
-        for j in range(1,len(cliques[i])):
-            density[i] += np.exp(-1 * ( np.linalg.norm(features[i][0] - features[cliques[i][j]][0]) ) / 2*bandwidth**2)
+        for elem in cliques[i]:
+            #density[i] += np.exp(-1 * ( np.linalg.norm(features[i][0] - features[cliques[i][j]][0]) ) / 2*bandwidth**2)
+            density[i] += auxDensity(features[i][0], features[elem][0], bandwidth)
         density[i] /= np.sqrt(2*np.pi)*bandwidth
 
     return density
@@ -242,23 +277,23 @@ def calculateUniformity(cliques, clusters, features):
 
     # For every pair of point in each clique
     for f in range(len(features)):
-        for q in range(1,len(cliques[f])):
+        for elem in cliques[f]:
             # We measure the distance if we have to
-            if dist_matrix[f][cliques[f][q]] == -1:
-                    dist_matrix[f][cliques[f][q]] = np.linalg.norm(features[f][0] - features[cliques[f][q]][0])
-                    dist_matrix[cliques[f][q]][f] = dist_matrix[f][cliques[f][q]]
+            if dist_matrix[f][elem] == -1:
+                    dist_matrix[f][elem] = np.linalg.norm(features[f][0] - features[elem][0])
+                    dist_matrix[elem][f] = dist_matrix[f][elem]
             # We follow the formula for the uniformity of each cluster
-            if(f != cliques[f][q]):
-                if(clusters[f] == clusters[cliques[f][q]]):
-                    intra_cluster[clusters[f]] += 1 / dist_matrix[f][cliques[f][q]]
+            if(f != elem):
+                if(clusters[f] == clusters[elem]):
+                    intra_cluster[clusters[f]] += 1 / dist_matrix[f][elem]
                 else:
-                    inter_cluster[clusters[f]] += 1 / dist_matrix[f][cliques[f][q]]
-                total_sum += 1 / dist_matrix[f][cliques[f][q]]
+                    inter_cluster[clusters[f]] += 1 / dist_matrix[f][elem]
+                total_sum += 1 / dist_matrix[f][elem]
 
     uniformity = (intra_cluster / total_sum) - (inter_cluster / total_sum)**2
 
     # We return a list to keep consistency with the rest of the descriptors
-    return list(uniformity)
+    return [uniformity[clusters[i]] for i in range(len(clusters))]
     
 ########### IMAGE VISUALIZATION ###########
 
@@ -284,7 +319,7 @@ def addCliqueToImage(cliques, index, img, trayectories, tr_index = -1, color = (
     point = trayectories[index][tr_index]
     point = (int(point[0]), int(point[1]))
     cv.circle(img,point,2,(255,0,155),4)
-    for i in range(1,len(cliques[index])):
+    for i in range(len(cliques[index])):
         point = trayectories[cliques[index][i]][tr_index]
         point = (int(point[0]), int(point[1]))
         cv.circle(img,point,1,color,2)
@@ -309,6 +344,7 @@ def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion 
 
     # ret = a boolean return value from getting the frame, first_frame = the first frame in the entire video sequence
     video_open, prev_frame = cap.read()
+    #prev_frame = cv.cvtColor(prev_frame, cv.COLOR_BGR2GRAY);
 
     # Delaunay Subdivision Function
     delaunay = cv.Subdiv2D()
@@ -370,14 +406,17 @@ def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion 
                 # Interactive Behaviours
                 stability = calculateStability(cliques,trayectories)
             
-                collectiveness = calculateCollectiveness(cliques,trayectories)
-            
-                conflict = calculateConflict(cliques,trayectories)
+                #collectiveness = calculateCollectiveness(cliques,trayectories)
+                
+                #conflict = calculateConflict(cliques,trayectories)
+
+                collectiveness, conflict = calculateCollectivenessAndConflict(cliques,trayectories)
             
                 density = calculateDensity(cliques,prev)
 
-                clusters = getClusters(prev)
-                uniformity = calculateUniformity(cliques, clusters, prev)
+                #clusters = getClusters(prev)
+                #uniformity = calculateUniformity(cliques, clusters, prev)
+                uniformity = [0,0]
                 
                 
                 file.write(str(velocity)+"\n")
@@ -402,6 +441,7 @@ def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion 
         video_open, frame = cap.read()
         
         if video_open:
+            #frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY);
             # # Calculates sparse optical flow by Lucas-Kanade method
             # # https://docs.opencv.org/3.0-beta/modules/video/doc/motion_analysis_and_object_tracking.html#calcopticalflowpyrlk
             if (it > L) :
@@ -480,10 +520,11 @@ def get_Test_Descriptors(path,out_path = "./"):
     test_files = glob(path+"*")
     i = 1
     for file in test_files:
+        name = file.split("/")[-1][:-4]
         # We reset the file if it exists
-        f = open(out_path+str(i),"w")
+        f = open(out_path+name,"w")
         f.close()
-        extract_descriptors(file,out_path+str(i))
+        extract_descriptors(file,out_path+name)
         i += 1
         print(file,": DONE",sep = "")
 
@@ -538,43 +579,38 @@ def test_OC_SVM(samples,in_file = "svm.plk"):
 
 ################################################################
     
-
-np.random.seed(5)
+escena = 1
 
 start = time.time()
 get_Training_Descriptors("Datasets/UMN/Training/Escena 1/","Training Descriptors/escena1_tra_descriptors")
 print(time.time()-start)
-#get_Training_Descriptors("Datasets/UMN/Training/Escena 2/","Training Descriptors/escena2_tra_descriptors")
-#get_Training_Descriptors("Datasets/UMN/Training/Escena 3/","Training Descriptors/escena3_tra_descriptors")
-get_Test_Descriptors("Datasets/UMN/Escenas Completas/Escena 1/","Full Video Descriptors/Escena 1/")
+# get_Training_Descriptors("Datasets/UMN/Training/Escena 2/","Training Descriptors/escena2_tra_descriptors")
+# get_Training_Descriptors("Datasets/UMN/Training/Escena 3/","Training Descriptors/escena3_tra_descriptors")
+get_Test_Descriptors("Datasets/UMN/Escenas Completas/Escena "+str(escena)+"/","Full Video Descriptors/Escena "+str(escena)+"/")
 
-#extract_descriptors("Datasets/UMN/Training/Escena 1/tr1.mp4")
+gt = get_Ground_Truth("Datasets/UMN/ground_truth.txt")
 
-range_max = get_Max_Descriptors("Training Descriptors/escena1_tra_descriptors")
-hist = get_Histograms("Training Descriptors/escena1_tra_descriptors", range_max)
+range_max = get_Max_Descriptors("Training Descriptors/escena"+str(escena)+"_tra_descriptors")
+hist = get_Histograms("Training Descriptors/escena"+str(escena)+"_tra_descriptors", range_max)
 print(time.time()-start)
 train_OC_SVM(hist)
 
-hist = get_Histograms("Full Video Descriptors/Escena 1/1", range_max)
-labels = [1 if i < 666 else -1 for i in range(len(hist))]
-predicted_1 = test_OC_SVM(hist)
-score = accuracy_score(labels,predicted_1,normalize = False)
-all_labels = labels.copy()
+total_labels = []
+total_predicted = np.array([])
+for d in glob("Full Video Descriptors/Escena "+str(escena)+"/*"):
+    hist = get_Histograms(d, range_max)
+    limit = gt[d.split("/")[-1]]
+    labels = [1 if i < limit else -1 for i in range(len(hist))]
+    predicted = test_OC_SVM(hist)
+    
+    score = accuracy_score(labels,predicted,normalize = False)
+    print(score," - ",len(hist))
+    
+    total_predicted = np.concatenate((total_predicted,predicted))
+    total_labels += labels
 
-print(score,"-",len(hist))
-
-hist = get_Histograms("Full Video Descriptors/Escena 1/2", range_max)
-labels = [1 if i < 484 else -1 for i in range(len(hist))]
-predicted_2 = test_OC_SVM(hist)
-score = accuracy_score(labels,predicted_2,normalize = False)
-all_labels += labels
-
-print(score,"-",len(hist))
-
-all_predictions = np.concatenate((predicted_1,predicted_2))
-
-print("Accuracy:",accuracy_score(all_labels,all_predictions))
-print("AUC:",roc_auc_score(all_labels,all_predictions))
+print("Accuracy:",accuracy_score(total_labels,total_predicted))
+print("AUC:",roc_auc_score(total_labels,total_predicted))
 
 print(time.time()-start)
 
@@ -585,3 +621,6 @@ print(time.time()-start)
 #Accuracy: 0.9681753889674681
 #AUC: 0.9775164690382082
 
+# No uniformity
+# Accuracy: 0.9809052333804809
+# AUC: 0.9882608695652174 
