@@ -27,7 +27,7 @@ def get_Ground_Truth(in_file):
         gt[lista[0]] = int(lista[1])
 
     f.close()
-        
+
     return gt
 
 @jit(nopython = True)
@@ -73,7 +73,7 @@ def crossRatioTriangle(pt2,pt0,pt1):
     if (dst01 != 0 and dst002 != 0 and dst012 != 0):
         cos02 = dot02 / (dst01 * dst002)
         cos12 = dot12 / (dst01 * dst012)
-        
+
         # Distance of the proyection to pt0
         dst_pr02 = cos02 * dst002
         dst_pr12 = cos12 * dst012
@@ -81,7 +81,7 @@ def crossRatioTriangle(pt2,pt0,pt1):
         # Cross ratio calculation
         cr = dst_pr12*(dst01 - dst_pr02) / dst01*(dst_pr12-dst_pr02)
     else:
-        cr = 0    
+        cr = 0
 
     return cr
 
@@ -103,7 +103,7 @@ def distanceTriangles(old, new):
 def getCliques(grafo, features):
     edges = grafo.getEdgeList()
     point = namedtuple("point", ["x", "y"])
-    points = {point(features[i][0][0],features[i][0][1]):i for i in np.arange(len(features))}        
+    points = {point(features[i][0][0],features[i][0][1]):i for i in np.arange(len(features))}
     cliques = [[] for p in features]
     for e in edges:
         # For every edge we get the origin and destination
@@ -115,17 +115,17 @@ def getCliques(grafo, features):
             destino = points[destino]
             cliques[origen].append(destino)
             cliques[destino].append(origen)
-        
+
     return np.array(cliques)
 
 def getClusters(features, mini = 2, e = 10):
     features = [item[0] for item in features]
     clusters = DBSCAN(eps=e, min_samples=mini).fit_predict(features)
-    
+
     return clusters
 
 # Function to add new features to an existing array
-# Can be used for a more stable graph but execution time increases 
+# Can be used for a more stable graph but execution time increases
 def addFeatures(prev_features, new_features, accuracy = 5.0):
     grid = prev_features // accuracy
     point = namedtuple("point", ["x", "y"])
@@ -140,7 +140,7 @@ def addFeatures(prev_features, new_features, accuracy = 5.0):
     if(len(new_features) == 0):
         return prev_features
     new_features = new_features.reshape(-1, 1, 2)
-            
+
     return np.append(prev_features,new_features, axis = 0)
 
 ############# METRICS #############
@@ -160,14 +160,14 @@ def calculateMovement(features, trayectories, min_motion = 1.0):
 
     #     # Distance between initial and final state
     #     motion = np.linalg.norm(tracklet[0]-tracklet[-1])
-        
+
     #     # If the length is < beta we discard it
     #     if motion < min_motion:
     #         static_features.append(i)
     #     # else we save its velocity
     #     else:
     #         velocity.append(motion / len(tracklet))
-        
+
     #We remove the static features
     features = np.delete(features,static_features,0)
     velocity = np.delete(velocity,static_features,0)
@@ -187,7 +187,7 @@ def calculateStability(cliques, trayectories, t2 = -2):
     stability = np.zeros(len(trayectories))
     # For every tracklet
     for i in np.arange(len(trayectories)):
-        # We calculate  the change of size and shape of all the posible triangles in the clique 
+        # We calculate  the change of size and shape of all the posible triangles in the clique
         for pair in combinations(cliques[i],2):
             old_triangle = (trayectories[i][t2],trayectories[pair[0]][t2], trayectories[pair[1]][t2])
             new_triangle = (trayectories[i][-1],trayectories[pair[0]][-1], trayectories[pair[1]][-1])
@@ -208,7 +208,7 @@ def calculateCollectiveness(cliques, trayectories):
 
     return collectiveness
 
-def calculateConflict(cliques, trayectories):   
+def calculateConflict(cliques, trayectories):
     # Initialization
     conflict = [0 for vector in trayectories]
     # For every feature point
@@ -244,7 +244,7 @@ def auxDensity(f1, f2, bandwidth):
 
 def calculateDensity(cliques,features, bandwidth = 0.5):
     # Bandwidth = Bandwidth of the 2D Gaussian Kernel
-    
+
     density = np.array([np.sum([auxDensity(features[i][0], features[elem][0], bandwidth) for elem in cliques[i]])
                / np.sqrt(2*np.pi)*bandwidth
                            for i in np.arange(len(cliques))])
@@ -252,7 +252,7 @@ def calculateDensity(cliques,features, bandwidth = 0.5):
     return density
 
 def calculateUniformity(cliques, clusters, features):
-    #Initialization 
+    #Initialization
     #uniformity = [0 for i in np.arange(max(max(clusters)+1,1))]
     uniformity = np.zeros(max(max(clusters)+1,1))
     #inter_cluster = [0 for i in uniformity]
@@ -282,7 +282,7 @@ def calculateUniformity(cliques, clusters, features):
     # We return a list to keep consistency with the rest of the descriptors
     return np.array([uniformity[clusters[i]] for i in np.arange(len(clusters))])
     #return uniformity
-    
+
 ########### IMAGE VISUALIZATION ###########
 
 def addDelaunayToImage(graph, img, color = (0,255,0), width = 1):
@@ -319,7 +319,7 @@ def addClustersToImage(clusters, features, img):
         point = (int(point[0]), int(point[1]))
         color = 255 * (clusters[i]+1) / n_clusters
         cv.circle(img,point,1,(color,0,color),2)
-            
+
 #################### DESCRIPTORS ###########################
 
 # Function to extract the descriptors of a video
@@ -352,10 +352,10 @@ def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion 
     for p in prev_aux:
         a, b = p.ravel()
         trayectories_aux.append([np.array((a,b))])
-    
+
     while(video_open):
         it += 1
-        
+
         if(it % L == 0):
             # Feature detection
             prev = prev_aux.copy()
@@ -368,7 +368,7 @@ def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion 
             for p in prev_aux:
                 a, b = p.ravel()
                 trayectories_aux.append([np.array((a,b))])
-        
+
         # We calculate the metrics and begin a new set of trayectories every L frames
         if(it >= L):
             #Metrics analysis
@@ -379,37 +379,37 @@ def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion 
             #vel_hist = np.histogram(velocity, bins = 16, range = (0,prev.shape[0]//L))[0] #
 
             if len(prev) > 2:
-            
+
                 dir_var = calculateDirectionVar(arr_trayectories)
                 #dir_hist = np.histogram(dir_var, bins = 16, range = (0,3))[0]  #
 
                 # Delaunay representation
                 rect = (0, 0, prev_frame.shape[1], prev_frame.shape[0])
                 delaunay.initDelaunay(rect)
-                
+
                 for point in prev:
                     a, b = point.ravel()
                     if(imgContains(frame,(a,b))):
                         delaunay.insert((a,b))
-                
+
                 cliques = getCliques(delaunay, prev)
 
                 # Interactive Behaviours
                 stability = calculateStability(cliques,arr_trayectories)
-            
+
                 #collectiveness = calculateCollectiveness(cliques,trayectories)
-                
+
                 #conflict = calculateConflict(cliques,trayectories)
 
                 collectiveness, conflict = calculateCollectivenessAndConflict(cliques,arr_trayectories)
-            
+
                 density = calculateDensity(cliques,prev)
 
                 clusters = getClusters(prev)
                 uniformity = calculateUniformity(cliques, clusters, prev)
                 #uniformity = [0,0]
-                
-                # Buscar una forma mejor 
+
+                # Buscar una forma mejor
                 file.write(str(velocity.tolist())+"\n")
                 file.write(str(dir_var.tolist())+"\n")
                 file.write(str(stability.tolist())+"\n")
@@ -417,7 +417,7 @@ def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion 
                 file.write(str(conflict.tolist())+"\n")
                 file.write(str(density.tolist())+"\n")
                 file.write(str(uniformity.tolist())+"\n")
-                
+
 
                 # Image representation for checking results
                 #addTrayectoriesToImage(trayectories,frame)
@@ -426,11 +426,11 @@ def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion 
                 #addClustersToImage(clusters,prev,frame)
                 #if frame.shape[0] < 512:
                 #    frame = cv.resize(frame,(512,int(512*frame.shape[0]/frame.shape[1])))
-                cv.imshow("Crowd", frame)            
-        
+                cv.imshow("Crowd", frame)
+
         #ret = a boolean return value from getting the frame, frame = the current frame being projected in the video
         video_open, frame = cap.read()
-        
+
         if video_open:
             #frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY);
             # # Calculates sparse optical flow by Lucas-Kanade method
@@ -439,22 +439,22 @@ def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion 
                 if len(prev) > 0:
                     nex, status, error = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev, None)
                     aux, status, error = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex, prev)
-        
+
                     # Selects good feature points for previous position
                     for i in np.arange(len(status)-1, -1, -1):
                         if status[i] == 0:
                             del trayectories[i]
-                
+
                     # Selects good feature points for nex position
                     good_new = nex[status == 1]
-        
+
                     for i, (new) in enumerate(good_new):
                         # Adds the new coordinates to the graph and the trayectories
                         a, b = new.ravel()
                         if(imgContains(frame,(a,b))):
                             trayectories[i].append(np.array((a,b)))
                             del trayectories[i][0]
-    
+
                     # Updates previous good feature points
                     prev = good_new.reshape(-1, 1, 2)
 
@@ -462,27 +462,27 @@ def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion 
             aux, status_aux, error = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex_aux, prev_aux)
 
             if status_aux is not None:
-        
+
                 # Selects good feature points for previous position
                 for i in np.arange(len(status_aux)-1, -1, -1):
                     if status_aux[i] == 0:
                         del trayectories_aux[i]
-                
+
                 # Selects good feature points for nex position
                 good_new = nex_aux[status_aux == 1]
-        
+
                 for i, (new) in enumerate(good_new):
                     # Adds the new coordinates to the graph and the trayectories
                     a, b = new.ravel()
                     if(imgContains(frame,(a,b))):
                         trayectories_aux[i].append(np.array((a,b)))
-        
+
                 # Updates previous good feature points
                 prev_aux = good_new.reshape(-1, 1, 2)
 
                 # Updates previous frame
                 prev_frame = frame.copy()
-    
+
         # Frames are read by intervals of 10 milliseconds. The programs breaks out of the while loop when the user presses the 'q' key
         if cv.waitKey(10) & 0xFF == ord('q'):
             break
@@ -517,7 +517,7 @@ def get_Test_Descriptors(path,out_path = "./"):
         i += 1
         print(file,": DONE",sep = "")
 
-# Function to search for the maximun values of each descriptor on training 
+# Function to search for the maximun values of each descriptor on training
 def get_Max_Descriptors(des_file, n_descriptors = 7):
     # Max value of every descriptor on training
     maximos = [0 for i in np.arange(n_descriptors)]
@@ -530,14 +530,14 @@ def get_Max_Descriptors(des_file, n_descriptors = 7):
             maximos[i] = aux
         # Descriptors are stored in sequential order so we have to rotate in each iteration
         i = (i+1) % n_descriptors
-        
+
     f.close()
 
     return maximos
 
 ################## ONE CLASS SVM #####################
 
-# Function to get the normalized histograms of a set of descriptors 
+# Function to get the normalized histograms of a set of descriptors
 def get_Histograms(des_file, range_max, n_descriptors = 7):
     f = open(des_file)
     histograms = [[] for i in np.arange(n_descriptors)]
@@ -550,14 +550,14 @@ def get_Histograms(des_file, range_max, n_descriptors = 7):
             histograms[i].append(h / np.linalg.norm(h))
         else:
             histograms[i].append(h)
-        
+
         i = (i+1) % n_descriptors
 
     histograms = [np.concatenate(x) for x in zip(*histograms)]
     f.close()
-        
+
     return histograms
-    
+
 def train_OC_SVM(samples, out_file = "svm.plk"):
     svm = OneClassSVM(nu =0.01, kernel = "sigmoid", coef0 = 0.15).fit(samples)
     joblib.dump(svm, out_file)
@@ -568,7 +568,7 @@ def test_OC_SVM(samples,in_file = "svm.plk"):
     return svm.predict(samples)
 
 ################################################################
-    
+
 escena = 1
 
 start = time.time()
@@ -594,10 +594,10 @@ for d in glob("Full Video Descriptors/Escena "+str(escena)+"/*"):
     limit = gt[d.split("/")[-1]]
     labels = [1 if i < limit else -1 for i in np.arange(len(hist))]
     predicted = test_OC_SVM(hist)
-    
+
     score = accuracy_score(labels,predicted,normalize = False)
     print(d.split("/")[-1],score," - ",len(hist))
-    
+
     total_predicted = np.concatenate((total_predicted,predicted))
     total_labels += labels
 
