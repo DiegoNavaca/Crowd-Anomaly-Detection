@@ -155,25 +155,6 @@ def calculateMovement(features, trayectories, persp_map, min_motion = 1.0, erase
         
     if erase_slow:
         static_features = np.where(velocity < min_motion)[0]
-    # # We calculate the total length of every trayectory
-    # for i, (tracklet) in enumerate(trayectories):
-    #     # #Motion of the entire trayectory
-    #     # motion = 0
-    #     # prev = tracklet[0]
-    #     # for j in range(1,len(tracklet)):
-    #     #     nex = tracklet[j]
-    #     #     motion += euDistance(prev,nex)
-    #     #     prev = nex
-
-    #     # Distance between initial and final state
-    #     motion = np.linalg.norm(tracklet[0]-tracklet[-1])
-        
-    #     # If the length is < beta we discard it
-    #     if motion < min_motion:
-    #         static_features.append(i)
-    #     # else we save its velocity
-    #     else:
-    #         velocity.append(motion / len(tracklet))
         
     #We remove the static features
     if erase_slow:
@@ -186,24 +167,31 @@ def calculateMovement(features, trayectories, persp_map, min_motion = 1.0, erase
     return features, velocity, trayectories
 
 @jit(nopython = True)
-def calculateDirectionVar(trayectories):
+def calculateDirectionVar(trayectories, t2 = 1):
     direction_variation = np.zeros(len(trayectories))
 
-    for k in np.arange(len(trayectories)):
-        for i in np.arange(len(trayectories[k])-2):
-            direction_variation[k] += np.abs( direction(trayectories[k][i],trayectories[k][i+1])
-                                              - direction(trayectories[k][i+1],trayectories[k][i+2]) )
-        direction_variation[k] /= len(trayectories[k])
+    ini = 2*t2 + (len(trayectories[0])-1) % t2
+    lim = (len(trayectories[0]) // t2)-2
+
+    for k in range(len(trayectories)):
+        for i in range(ini,lim,t2):
+            aux = np.abs( direction(trayectories[k][i*t2],trayectories[k][(i-1)*t2])
+                                              - direction(trayectories[k][(i-1)*t2],trayectories[k][(i-2)*t2]) )
+            if aux >= np.pi:
+                aux = 2*np.pi-aux
+                
+            direction_variation[k] += aux
+        direction_variation[k] /= (len(trayectories[0]) // t2)
 
     return direction_variation
 
-def calculateStability(cliques, trayectories, t2 = -2):
+def calculateStability(cliques, trayectories, t2 = 1):
     stability = np.zeros(len(trayectories))
     # For every tracklet
     for i in np.arange(len(trayectories)):
         # We calculate  the change of size and shape of all the posible triangles in the clique 
         for pair in combinations(cliques[i],2):
-            old_triangle = (trayectories[i][t2],trayectories[pair[0]][t2], trayectories[pair[1]][t2])
+            old_triangle = (trayectories[i][t2],trayectories[pair[0]][-1-t2], trayectories[pair[1]][-1-t2])
             new_triangle = (trayectories[i][-1],trayectories[pair[0]][-1], trayectories[pair[1]][-1])
             stability[i] += distanceTriangles(old_triangle, new_triangle)
         stability[i] = stability[i] / (len(cliques[i])+1)
@@ -422,7 +410,7 @@ def extract_descriptors(video_file, persp_map, out_file = "descriptors"):
 
             if len(prev) > 10:
 
-                dir_var = calculateDirectionVar(arr_trayectories)
+                dir_var = calculateDirectionVar(arr_trayectories, t2 = t2)
                 
 
                 # Delaunay representation
@@ -468,8 +456,8 @@ def extract_descriptors(video_file, persp_map, out_file = "descriptors"):
             file.write(str(uniformity.tolist())+"\n")                
 
             # Image representation for checking results
-            #addTrayectoriesToImage(trayectories,frame)
-            addDelaunayToImage(delaunay,frame)
+            addTrayectoriesToImage(trayectories,frame)
+            #addDelaunayToImage(delaunay,frame)
             #addCliqueToImage(cliques, -1, frame,trayectories)
             #addClustersToImage(clusters,prev,frame)
             #if frame.shape[0] < 512:
@@ -639,8 +627,9 @@ def test_OC_SVM(samples,in_file = "svm.plk"):
 ################################################################
 
 L = 20
-t1 = -6
-min_motion = 0.05
+t1 = -5
+t2 = 5
+min_motion = 0.01
 fast_threshold = 20
 
 escena = 1
@@ -653,10 +642,10 @@ p_map = np.identity(3)
 
 start = time.time()
 get_Training_Descriptors("Datasets/UMN/Training/Escena "+str(escena)+"/",p_map, "Training Descriptors/escena"+str(escena)+"_tra_descriptors")
-print("Tiempo extracción en training:",time.time()-start)
+print("Tiempo extracción en training: {:4.5}".format(time.time()-start))
 
 get_Test_Descriptors("Datasets/UMN/Test/Escena "+str(escena)+"/", p_map, "Full Video Descriptors/Escena "+str(escena)+"/")
-print("Tiempo extracción en test:",time.time()-start)
+print("Tiempo extracción en test: {:4.5}".format(time.time()-start))
 
 gt = get_Ground_Truth("Datasets/UMN/ground_truth.txt")
 
@@ -685,16 +674,16 @@ for d in glob("Full Video Descriptors/Escena "+str(escena)+"/*"):
 print("Accuracy: {:1.3f}".format(accuracy_score(total_labels,total_predicted)))
 print("AUC: {:1.3f}".format(roc_auc_score(total_labels,total_predicted)))
 
-print("Tiempo total:",time.time()-start)
+print("Tiempo total: {:4.5}".format(time.time()-start))
 
 #L = 5
 #mm = 0.05
 # E1
-#Accuracy: 0.9375
-#AUC: 0.9539249146757679
+#Accuracy: 0.948
+#AUC: 0.953
 # E2
-#Accuracy: 0.8072196620583717
-#AUC: 0.812316567149074
+#Accuracy: 0.796
+#AUC: 0.814
 # E3
 #Accuracy: 
 #AUC: 
