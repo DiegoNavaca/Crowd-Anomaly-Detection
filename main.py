@@ -1,11 +1,10 @@
+import time
 import cv2 as cv
 import numpy as np
 from sklearn.cluster import DBSCAN
 from sklearn.svm import OneClassSVM
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import roc_auc_score
-import time
-import os
 from collections import namedtuple
 from glob import glob
 import joblib
@@ -148,12 +147,14 @@ def delete_row(arr, num):
     return arr[mask]
 
 @jit(nopython = True)
-def calculateMovement(features, trayectories, persp_map, min_motion = 1.0):
+def calculateMovement(features, trayectories, persp_map, min_motion = 1.0, erase_slow = False):
     #velocity = np.array([np.linalg.norm(tracklet[0]-tracklet[-1]) for tracklet in trayectories])
     velocity = np.zeros(len(trayectories),dtype = numba.float64)
     for i in range(len(trayectories)):
         velocity[i] = np.linalg.norm(np.dot(persp_map,trayectories[i][0])-np.dot(persp_map,trayectories[i][-1]) )
-    static_features = np.where(velocity < min_motion)[0]
+        
+    if erase_slow:
+        static_features = np.where(velocity < min_motion)[0]
     # # We calculate the total length of every trayectory
     # for i, (tracklet) in enumerate(trayectories):
     #     # #Motion of the entire trayectory
@@ -175,9 +176,10 @@ def calculateMovement(features, trayectories, persp_map, min_motion = 1.0):
     #         velocity.append(motion / len(tracklet))
         
     #We remove the static features
-    features = delete_row(features,static_features)
-    velocity = delete_row(velocity,static_features)
-    trayectories = delete_row(trayectories,static_features)
+    if erase_slow:
+        features = delete_row(features,static_features)
+        velocity = delete_row(velocity,static_features)
+        trayectories = delete_row(trayectories,static_features)
 
     velocity = velocity / np.array([len(tracklet) for tracklet in trayectories])
 
@@ -283,18 +285,18 @@ def auxUniformity(clique, features, f, clusters):
     total_sum = 0
 
     for i in np.arange(len(clique)):
-            elem = int(clique[i])
-            # We measure the distance if we have to
-            if dist_matrix[f][elem] == 0:
-                    dist_matrix[f][elem] = np.linalg.norm(features[f][0] - features[elem][0])
-                    dist_matrix[elem][f] = dist_matrix[f][elem]
-            # We follow the formula for the uniformity of each cluster
-            if(f != elem):
-                if(clusters[f] == clusters[elem]):
-                    intra_cluster[clusters[f]] += 1 / dist_matrix[f][elem]
-                else:
-                    inter_cluster[clusters[f]] += 1 / dist_matrix[f][elem]
-                total_sum += 1 / dist_matrix[f][elem]
+        elem = int(clique[i])
+        # We measure the distance if we have to
+        if dist_matrix[f][elem] == 0:
+            dist_matrix[f][elem] = np.linalg.norm(features[f][0] - features[elem][0])
+            dist_matrix[elem][f] = dist_matrix[f][elem]
+        # We follow the formula for the uniformity of each cluster
+        if(f != elem):
+            if(clusters[f] == clusters[elem]):
+                intra_cluster[clusters[f]] += 1 / dist_matrix[f][elem]
+            else:
+                inter_cluster[clusters[f]] += 1 / dist_matrix[f][elem]
+            total_sum += 1 / dist_matrix[f][elem]
 
     return total_sum, intra_cluster, inter_cluster
 
@@ -333,11 +335,11 @@ def addDelaunayToImage(graph, img, color = (0,255,0), width = 1):
             cv.line(img, pt1, pt2, color, width)
 
 def addTrayectoriesToImage(trayectories, img, color = (0,0,255), width = 1):
-    for i, (tracklet) in enumerate(trayectories):
+    for tracklet in trayectories:
         prev = tracklet[0]
         prev = (int(prev[0]),int(prev[1]))
-        for i in np.arange(1,len(tracklet)):
-            nex = tracklet[i]
+        for j in np.arange(1,len(tracklet)):
+            nex = tracklet[j]
             nex = (int(nex[0]),int(nex[1]))
             cv.line(img, prev, nex, color, width)
             prev = nex
@@ -362,7 +364,7 @@ def addClustersToImage(clusters, features, img):
 #################### DESCRIPTORS ###########################
 
 # Function to extract the descriptors of a video
-def extract_descriptors(video_file, persp_map, out_file = "descriptors", L = 5, min_motion = 0.025, fast_threshold = 20):
+def extract_descriptors(video_file, persp_map, out_file = "descriptors", L = 5, min_motion = 0.05, fast_threshold = 20):
     #FAST algorithm for feature detection
     fast = cv.FastFeatureDetector_create()
     fast.setThreshold(fast_threshold)
@@ -402,7 +404,9 @@ def extract_descriptors(video_file, persp_map, out_file = "descriptors", L = 5, 
             prev_aux = cv.KeyPoint_convert(prev_key)
             prev_aux = prev_aux.reshape(-1, 1, 2)
 
-            trayectories = trayectories_aux.copy()
+            trayectories_aux = np.array(trayectories_aux)
+            prev, velocity, trayectories = calculateMovement(prev,trayectories_aux, persp_map, min_motion*L, erase_slow = True)
+            trayectories = trayectories.tolist()
             trayectories_aux = []
             for p in prev_aux:
                 a, b = p.ravel()
@@ -413,8 +417,8 @@ def extract_descriptors(video_file, persp_map, out_file = "descriptors", L = 5, 
             #Metrics analysis
             if len(trayectories) > 0:
                 arr_trayectories = np.array(trayectories)
-                prev, velocity, arr_trayectories = calculateMovement(prev,arr_trayectories, persp_map, min_motion*L)
-                trayectories = arr_trayectories.tolist()
+                _, velocity, _ = calculateMovement(prev,arr_trayectories, persp_map, min_motion*L)
+                
 
             if len(prev) > 10:
 
@@ -481,8 +485,8 @@ def extract_descriptors(video_file, persp_map, out_file = "descriptors", L = 5, 
             # # https://docs.opencv.org/3.0-beta/modules/video/doc/motion_analysis_and_object_tracking.html#calcopticalflowpyrlk
             if (it > L) :
                 if len(prev) > 0:
-                    nex, status, error = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev, None)
-                    aux, status, error = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex, prev)
+                    nex, status, _ = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev, None)
+                    _, status, _ = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex, prev)
                     
         
                     # Selects good feature points for previous position
@@ -502,8 +506,8 @@ def extract_descriptors(video_file, persp_map, out_file = "descriptors", L = 5, 
                     # Updates previous good feature points
                     prev = good_new.reshape(-1, 1, 2)
 
-            nex_aux, status_aux, error = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev_aux, None)
-            aux, status_aux, error = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex_aux, prev_aux)
+            nex_aux, status_aux, _ = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev_aux, None)
+            _, status_aux, _ = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex_aux, prev_aux)
 
             if status_aux is not None:
         
@@ -528,8 +532,8 @@ def extract_descriptors(video_file, persp_map, out_file = "descriptors", L = 5, 
                 # Updates previous frame
                 prev_frame = frame.copy()
     
-        # Frames are read by intervals of 10 milliseconds. The programs breaks out of the while loop when the user presses the 'q' key
-        if cv.waitKey(10) & 0xFF == ord('q'):
+    # Frames are read by intervals of 1 milliseconds. The programs breaks out of the while loop when the user presses the 'q' key
+        if cv.waitKey(1) & 0xFF == ord('q'):
             break
 
     # The following frees up resources and closes all windows
@@ -624,7 +628,7 @@ def get_Histograms(des_file, range_max, n_descriptors = 7):
     return histograms
     
 def train_OC_SVM(samples, out_file = "svm.plk"):
-    svm = OneClassSVM(nu =0.01, verbose = False, kernel = "sigmoid").fit(samples)
+    svm = OneClassSVM(nu =0.01, verbose = False, kernel = "rbf", gamma = 1).fit(samples)
     joblib.dump(svm, out_file)
 
 def test_OC_SVM(samples,in_file = "svm.plk"):
@@ -634,7 +638,7 @@ def test_OC_SVM(samples,in_file = "svm.plk"):
 
 ################################################################
     
-escena = 1
+escena = 2
 
 path_p_map = "Datasets/UMN/Training/Escena "+str(escena)+"/persp_map.npy"
 # if(os.path.isfile(path_p_map)):
@@ -643,12 +647,10 @@ path_p_map = "Datasets/UMN/Training/Escena "+str(escena)+"/persp_map.npy"
 p_map = np.identity(3)
 
 start = time.time()
-#get_Training_Descriptors("Datasets/UMN/Training/Escena "+str(escena)+"/",p_map,
-#                        "Training Descriptors/escena"+str(escena)+"_tra_descriptors")
+#get_Training_Descriptors("Datasets/UMN/Training/Escena "+str(escena)+"/",p_map, "Training Descriptors/escena"+str(escena)+"_tra_descriptors")
 print("Tiempo extracción en training:",time.time()-start)
 
-#get_Test_Descriptors("Datasets/UMN/Test/Escena "+str(escena)+"/", p_map,
-#                     "Full Video Descriptors/Escena "+str(escena)+"/")
+#get_Test_Descriptors("Datasets/UMN/Test/Escena "+str(escena)+"/", p_map, "Full Video Descriptors/Escena "+str(escena)+"/")
 print("Tiempo extracción en test:",time.time()-start)
 
 gt = get_Ground_Truth("Datasets/UMN/ground_truth.txt")
@@ -675,19 +677,19 @@ for d in glob("Full Video Descriptors/Escena "+str(escena)+"/*"):
     total_predicted = np.concatenate((total_predicted,predicted))
     total_labels += labels
 
-print("Accuracy:",accuracy_score(total_labels,total_predicted))
-print("AUC:",roc_auc_score(total_labels,total_predicted))
+print("Accuracy: {:1.3f}".format(accuracy_score(total_labels,total_predicted)))
+print("AUC: {:1.3f}".format(roc_auc_score(total_labels,total_predicted)))
 
 print("Tiempo total:",time.time()-start)
 
 #L = 5
-#mm = 0.025
+#mm = 0.05
 # E1
-#Accuracy: 0.9432870370370371
-#AUC: 0.9581911262798635
+#Accuracy: 0.9375
+#AUC: 0.9539249146757679
 # E2
-#Accuracy: 0.8360091743119266
-#AUC: 0.8140651275741833
+#Accuracy: 0.8072196620583717
+#AUC: 0.812316567149074
 # E3
 #Accuracy: 
 #AUC: 
