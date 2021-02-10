@@ -5,17 +5,13 @@ from sklearn.svm import OneClassSVM
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import roc_auc_score
 import time
+import os
 from collections import namedtuple
 from glob import glob
 import joblib
 import numba
 from numba import jit
 from itertools import combinations
-
-# Transforms a string into a list if it has the correct representation (faster than eval())
-def string_To_List(s):
-    lista = s[1:-2].split(", ")
-    return [float(i) for i in lista]
 
 # Reads the ground truth from a file
 def get_Ground_Truth(in_file):
@@ -24,7 +20,7 @@ def get_Ground_Truth(in_file):
     for line in f:
         lista = line.split(",")
         # name: beginning anomaly
-        gt[lista[0]] = int(lista[1])
+        gt[lista[0]] = [int(lista[1]),int(lista[2])]
 
     f.close()
         
@@ -115,8 +111,9 @@ def getCliques(grafo, features):
             destino = points[destino]
             cliques[origen].append(destino)
             cliques[destino].append(origen)
-        
-    return np.array(cliques)
+
+    cliques = np.asarray(cliques, dtype = object)
+    return cliques
 
 def getClusters(features, mini = 2, e = 10):
     features = [item[0] for item in features]
@@ -144,9 +141,18 @@ def addFeatures(prev_features, new_features, accuracy = 5.0):
     return np.append(prev_features,new_features, axis = 0)
 
 ############# METRICS #############
-def calculateMovement(features, trayectories, min_motion = 1.0):
-    static_features = []
-    velocity = np.array([np.linalg.norm(tracklet[0]-tracklet[-1]) for tracklet in trayectories])
+@jit(nopython = True)
+def delete_row(arr, num):
+    mask = np.zeros(arr.shape[0], dtype=np.int64) == 0
+    mask[num] = False
+    return arr[mask]
+
+@jit(nopython = True)
+def calculateMovement(features, trayectories, persp_map, min_motion = 1.0):
+    #velocity = np.array([np.linalg.norm(tracklet[0]-tracklet[-1]) for tracklet in trayectories])
+    velocity = np.zeros(len(trayectories),dtype = numba.float64)
+    for i in range(len(trayectories)):
+        velocity[i] = np.linalg.norm(np.dot(persp_map,trayectories[i][0])-np.dot(persp_map,trayectories[i][-1]) )
     static_features = np.where(velocity < min_motion)[0]
     # # We calculate the total length of every trayectory
     # for i, (tracklet) in enumerate(trayectories):
@@ -169,17 +175,23 @@ def calculateMovement(features, trayectories, min_motion = 1.0):
     #         velocity.append(motion / len(tracklet))
         
     #We remove the static features
-    features = np.delete(features,static_features,0)
-    velocity = np.delete(velocity,static_features,0)
-    trayectories = np.delete(trayectories,static_features,0)
+    features = delete_row(features,static_features)
+    velocity = delete_row(velocity,static_features)
+    trayectories = delete_row(trayectories,static_features)
 
-    velocity = velocity / [len(tracklet) for tracklet in trayectories]
+    velocity = velocity / np.array([len(tracklet) for tracklet in trayectories])
 
     return features, velocity, trayectories
 
+@jit(nopython = True)
 def calculateDirectionVar(trayectories):
-    direction_variation = np.array([np.sum([np.abs( direction(tracklet[i],tracklet[i+1]) - direction(tracklet[i+1],tracklet[i+2]) )
-                                               for i in np.arange(len(tracklet)-2)]) / len(tracklet) for tracklet in trayectories])
+    direction_variation = np.zeros(len(trayectories))
+
+    for k in np.arange(len(trayectories)):
+        for i in np.arange(len(trayectories[k])-2):
+            direction_variation[k] += np.abs( direction(trayectories[k][i],trayectories[k][i+1])
+                                              - direction(trayectories[k][i+1],trayectories[k][i+2]) )
+        direction_variation[k] /= len(trayectories[k])
 
     return direction_variation
 
@@ -196,77 +208,84 @@ def calculateStability(cliques, trayectories, t2 = -2):
 
     return stability
 
-def calculateCollectiveness(cliques, trayectories):
-    # Initialization
-    collectiveness = [0 for vector in trayectories]
-    # For every feature point
-    for k in np.arange(len(cliques)):
-        # We average the angular diference between the motion vector of every point with its neighbours
-        for elem in cliques[k]:
-            collectiveness[k] += difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[elem][0],trayectories[elem][-1]))
-        collectiveness[k] /= (len(cliques[k])+1)
+# def calculateCollectiveness(cliques, trayectories):
+#     # Initialization
+#     collectiveness = [0 for vector in trayectories]
+#     # For every feature point
+#     for k in np.arange(len(cliques)):
+#         # We average the angular diference between the motion vector of every point with its neighbours
+#         for elem in cliques[k]:
+#             collectiveness[k] += difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[elem][0],trayectories[elem][-1]))
+#         collectiveness[k] /= (len(cliques[k])+1)
 
-    return collectiveness
+#     return collectiveness
 
-def calculateConflict(cliques, trayectories):   
-    # Initialization
-    conflict = [0 for vector in trayectories]
-    # For every feature point
-    for k in np.arange(len(cliques)):
-        # We average quotient of the angular diference between the motion vector of every point with its neighbours and their distances
-        for elem in cliques[k]:
-            conflict[k] += difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[elem][0],trayectories[elem][-1])) / np.linalg.norm(trayectories[k][-1] - trayectories[elem][-1])
-        conflict[k] /= (len(cliques[k])+1)
+# def calculateConflict(cliques, trayectories):
+#     # Initialization
+#     conflict = [0 for vector in trayectories]
+#     # For every feature point
+#     for k in np.arange(len(cliques)):
+#         # We average quotient of the angular diference between the motion vector of every point with its neighbours and their distances
+#         for elem in cliques[k]:
+#             conflict[k] += difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[elem][0],trayectories[elem][-1])) / np.linalg.norm(trayectories[k][-1] - trayectories[elem][-1])
+#         conflict[k] /= (len(cliques[k])+1)
 
-    return conflict
+#     return conflict
 
+@jit(nopython = True)
+def auxCollectivenessAndConflict(clique,trayectories, k):
+    collectiveness = 0
+    conflict = 0
+    k = int(k)
+    for i in range(len(clique)):
+        elem = int(clique[i])
+        dif = difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[elem][0],trayectories[elem][-1]))
+        collectiveness += dif
+        conflict += dif / np.linalg.norm(trayectories[k][-1] - trayectories[elem][-1])
+    collectiveness /= (len(clique)+1)
+    conflict /= (len(clique)+1)
+
+    return collectiveness, conflict
 
 def calculateCollectivenessAndConflict(cliques, trayectories):
     # Initialization
     collectiveness = np.zeros(len(trayectories))
     conflict = collectiveness.copy()
     # For every feature point
-    for k in np.arange(len(cliques)):
+    for k in range(len(cliques)):
         # We measure collectiveness and conflict
-        for elem in cliques[k]:
-            dif = difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[elem][0],trayectories[elem][-1]))
-            collectiveness[k] += dif
-            conflict[k] += dif / np.linalg.norm(trayectories[k][-1] - trayectories[elem][-1])
-        collectiveness[k] /= (len(cliques[k])+1)
-        conflict[k] /= (len(cliques[k])+1)
+        collectiveness[k], conflict[k] = auxCollectivenessAndConflict(np.array(cliques[k]),trayectories, k)
 
     return collectiveness, conflict
 
 @jit(nopython = True)
-def auxDensity(f1, f2, bandwidth):
-    v =  np.exp(-1 * ( np.linalg.norm(f1 - f2) ) / 2*bandwidth**2)
-    return v
-
-def calculateDensity(cliques,features, bandwidth = 0.5):
-    # Bandwidth = Bandwidth of the 2D Gaussian Kernel
-    
-    density = np.array([np.sum([auxDensity(features[i][0], features[elem][0], bandwidth) for elem in cliques[i]])
-               / np.sqrt(2*np.pi)*bandwidth
-                           for i in np.arange(len(cliques))])
+def auxDensity(clique, features, bandwidth, i):
+    density = 0
+    for j in range(len(clique)):
+        elem = int(clique[j])
+        density += np.exp(-1 * ( np.linalg.norm(features[i][0] - features[elem][0]) ) / 2*bandwidth**2)
+    density /= np.sqrt(2*np.pi)*bandwidth
 
     return density
 
-def calculateUniformity(cliques, clusters, features):
-    #Initialization 
-    #uniformity = [0 for i in np.arange(max(max(clusters)+1,1))]
-    uniformity = np.zeros(max(max(clusters)+1,1))
-    #inter_cluster = [0 for i in uniformity]
-    inter_cluster = np.zeros(len(uniformity))
+def calculateDensity(cliques,features, bandwidth = 0.5):
+    # Bandwidth = Bandwidth of the 2D Gaussian Kernel
+    density = np.array([auxDensity(np.array(cliques[i]), features, bandwidth,i) for i in range(len(cliques))])
+    
+    return density
+
+@jit(nopython = True)
+def auxUniformity(clique, features, f, clusters):
+    dist_matrix = np.zeros((len(features),len(features)),dtype = numba.float64)
+
+    inter_cluster = np.zeros(max(max(clusters)+1,1))
     intra_cluster = inter_cluster.copy()
     total_sum = 0
-    #dist_matrix = [[-1 for f2 in features] for f1 in features]
-    dist_matrix = np.full((len(features),len(features)),-1.0,dtype = float)
 
-    # For every pair of point in each clique
-    for f in np.arange(len(features)):
-        for elem in cliques[f]:
+    for i in np.arange(len(clique)):
+            elem = int(clique[i])
             # We measure the distance if we have to
-            if dist_matrix[f][elem] == -1:
+            if dist_matrix[f][elem] == 0:
                     dist_matrix[f][elem] = np.linalg.norm(features[f][0] - features[elem][0])
                     dist_matrix[elem][f] = dist_matrix[f][elem]
             # We follow the formula for the uniformity of each cluster
@@ -277,7 +296,27 @@ def calculateUniformity(cliques, clusters, features):
                     inter_cluster[clusters[f]] += 1 / dist_matrix[f][elem]
                 total_sum += 1 / dist_matrix[f][elem]
 
-    uniformity = (intra_cluster / total_sum) - (inter_cluster / total_sum)**2
+    return total_sum, intra_cluster, inter_cluster
+
+def calculateUniformity(cliques, clusters, features):
+    #Initialization 
+    uniformity = np.zeros(max(max(clusters)+1,1))
+    inter_cluster = np.zeros(len(uniformity))
+    intra_cluster = inter_cluster.copy()
+    total_sum = 0
+    
+
+    # For every pair of point in each clique
+    for f in np.arange(len(features)):
+        total, intra, inter = auxUniformity(np.array(cliques[f]), features, f, clusters)
+        total_sum += total
+        intra_cluster = intra_cluster + intra
+        inter_cluster = inter_cluster + inter
+
+    if(total_sum == 0):
+        uniformity = np.full(max(max(clusters)+1,1),-1)
+    else:
+        uniformity = (intra_cluster / total_sum) - (inter_cluster / total_sum)**2
 
     # We return a list to keep consistency with the rest of the descriptors
     return np.array([uniformity[clusters[i]] for i in np.arange(len(clusters))])
@@ -297,7 +336,7 @@ def addTrayectoriesToImage(trayectories, img, color = (0,0,255), width = 1):
     for i, (tracklet) in enumerate(trayectories):
         prev = tracklet[0]
         prev = (int(prev[0]),int(prev[1]))
-        for i in np.anp.arange(1,len(tracklet)):
+        for i in np.arange(1,len(tracklet)):
             nex = tracklet[i]
             nex = (int(nex[0]),int(nex[1]))
             cv.line(img, prev, nex, color, width)
@@ -323,7 +362,7 @@ def addClustersToImage(clusters, features, img):
 #################### DESCRIPTORS ###########################
 
 # Function to extract the descriptors of a video
-def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion = 0.025, fast_threshold = 20):
+def extract_descriptors(video_file, persp_map, out_file = "descriptors", L = 5, min_motion = 0.025, fast_threshold = 20):
     #FAST algorithm for feature detection
     fast = cv.FastFeatureDetector_create()
     fast.setThreshold(fast_threshold)
@@ -351,7 +390,7 @@ def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion 
     trayectories = []
     for p in prev_aux:
         a, b = p.ravel()
-        trayectories_aux.append([np.array((a,b))])
+        trayectories_aux.append([np.array((a,b,1))])
     
     while(video_open):
         it += 1
@@ -367,28 +406,27 @@ def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion 
             trayectories_aux = []
             for p in prev_aux:
                 a, b = p.ravel()
-                trayectories_aux.append([np.array((a,b))])
+                trayectories_aux.append([np.array((a,b,1))])
         
         # We calculate the metrics and begin a new set of trayectories every L frames
         if(it >= L):
             #Metrics analysis
             if len(trayectories) > 0:
                 arr_trayectories = np.array(trayectories)
-                prev, velocity, arr_trayectories = calculateMovement(prev,arr_trayectories, min_motion*L)
+                prev, velocity, arr_trayectories = calculateMovement(prev,arr_trayectories, persp_map, min_motion*L)
                 trayectories = arr_trayectories.tolist()
-            #vel_hist = np.histogram(velocity, bins = 16, range = (0,prev.shape[0]//L))[0] #
 
-            if len(prev) > 2:
-            
+            if len(prev) > 10:
+
                 dir_var = calculateDirectionVar(arr_trayectories)
-                #dir_hist = np.histogram(dir_var, bins = 16, range = (0,3))[0]  #
+                
 
                 # Delaunay representation
                 rect = (0, 0, prev_frame.shape[1], prev_frame.shape[0])
                 delaunay.initDelaunay(rect)
                 
                 for point in prev:
-                    a, b = point.ravel()
+                    a, b = point.ravel()[:2]
                     if(imgContains(frame,(a,b))):
                         delaunay.insert((a,b))
                 
@@ -396,37 +434,43 @@ def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion 
 
                 # Interactive Behaviours
                 stability = calculateStability(cliques,arr_trayectories)
-            
-                #collectiveness = calculateCollectiveness(cliques,trayectories)
-                
-                #conflict = calculateConflict(cliques,trayectories)
 
                 collectiveness, conflict = calculateCollectivenessAndConflict(cliques,arr_trayectories)
-            
+
                 density = calculateDensity(cliques,prev)
 
                 clusters = getClusters(prev)
                 uniformity = calculateUniformity(cliques, clusters, prev)
-                #uniformity = [0,0]
-                
-                # Buscar una forma mejor 
-                file.write(str(velocity.tolist())+"\n")
-                file.write(str(dir_var.tolist())+"\n")
-                file.write(str(stability.tolist())+"\n")
-                file.write(str(collectiveness.tolist())+"\n")
-                file.write(str(conflict.tolist())+"\n")
-                file.write(str(density.tolist())+"\n")
-                file.write(str(uniformity.tolist())+"\n")
-                
 
-                # Image representation for checking results
-                #addTrayectoriesToImage(trayectories,frame)
-                #addDelaunayToImage(delaunay,frame)
-                #addCliqueToImage(cliques, -1, frame,trayectories)
-                #addClustersToImage(clusters,prev,frame)
-                #if frame.shape[0] < 512:
-                #    frame = cv.resize(frame,(512,int(512*frame.shape[0]/frame.shape[1])))
-                cv.imshow("Crowd", frame)            
+            else:
+                print("None detected")
+                velocity = np.zeros(1)
+                dir_var = velocity.copy()
+                collectiveness = velocity.copy()
+                conflict = velocity.copy()
+                stability = velocity.copy()
+                density = velocity.copy()
+                uniformity = velocity.copy()
+                
+                                
+                # Buscar una forma mejor
+                
+            file.write(str(velocity.tolist())+"\n")
+            file.write(str(dir_var.tolist())+"\n")
+            file.write(str(stability.tolist())+"\n")
+            file.write(str(collectiveness.tolist())+"\n")
+            file.write(str(conflict.tolist())+"\n")
+            file.write(str(density.tolist())+"\n")
+            file.write(str(uniformity.tolist())+"\n")                
+
+            # Image representation for checking results
+            #addTrayectoriesToImage(trayectories,frame)
+            addDelaunayToImage(delaunay,frame)
+            #addCliqueToImage(cliques, -1, frame,trayectories)
+            #addClustersToImage(clusters,prev,frame)
+            #if frame.shape[0] < 512:
+            #    frame = cv.resize(frame,(512,int(512*frame.shape[0]/frame.shape[1])))
+            cv.imshow("Crowd", frame)            
         
         #ret = a boolean return value from getting the frame, frame = the current frame being projected in the video
         video_open, frame = cap.read()
@@ -439,6 +483,7 @@ def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion 
                 if len(prev) > 0:
                     nex, status, error = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev, None)
                     aux, status, error = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex, prev)
+                    
         
                     # Selects good feature points for previous position
                     for i in np.arange(len(status)-1, -1, -1):
@@ -451,9 +496,8 @@ def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion 
                     for i, (new) in enumerate(good_new):
                         # Adds the new coordinates to the graph and the trayectories
                         a, b = new.ravel()
-                        if(imgContains(frame,(a,b))):
-                            trayectories[i].append(np.array((a,b)))
-                            del trayectories[i][0]
+                        trayectories[i].append(np.array((a,b,1)))
+                        del trayectories[i][0]
     
                     # Updates previous good feature points
                     prev = good_new.reshape(-1, 1, 2)
@@ -474,8 +518,9 @@ def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion 
                 for i, (new) in enumerate(good_new):
                     # Adds the new coordinates to the graph and the trayectories
                     a, b = new.ravel()
-                    if(imgContains(frame,(a,b))):
-                        trayectories_aux[i].append(np.array((a,b)))
+                    trayectories_aux[i].append(np.array((a,b,1)))
+                    if( len(trayectories_aux[i]) > L ):
+                        del trayectories_aux[i][0]
         
                 # Updates previous good feature points
                 prev_aux = good_new.reshape(-1, 1, 2)
@@ -493,38 +538,58 @@ def extract_descriptors(video_file, out_file = "descriptors", L = 5, min_motion 
     file.close()
 
 # Function to get the descriptors of a set of training videos and store them on a single file
-def get_Training_Descriptors(path,out_file = "training_descriptors"):
+def get_Training_Descriptors(path,persp_map, out_file = "training_descriptors"):
     # We reset the file if it exists
     f = open(out_file,"w")
+    
+    velocity = np.zeros(1)
+    dir_var = velocity.copy()
+    collectiveness = velocity.copy()
+    conflict = velocity.copy()
+    stability = velocity.copy()
+    density = velocity.copy()
+    uniformity = velocity.copy()
+                
+                                
+    # Buscar una forma mejor
+                
+    f.write(str(velocity.tolist())+"\n")
+    f.write(str(dir_var.tolist())+"\n")
+    f.write(str(stability.tolist())+"\n")
+    f.write(str(collectiveness.tolist())+"\n")
+    f.write(str(conflict.tolist())+"\n")
+    f.write(str(density.tolist())+"\n")
+    f.write(str(uniformity.tolist())+"\n")
+    
     f.close()
     # We get the name of all the files in the directory
-    training_files = glob(path+"*")
-    for file in training_files:
-        extract_descriptors(file,out_file)
-        print(file,": DONE",sep = "")
+    training_files = glob(path+"*.avi")
+    for file_path in training_files:
+        extract_descriptors(file_path,persp_map, out_file)
+        print(file_path,": DONE",sep = "")
 
 # Function to get the descriptors of a set of training videos and store them on a single file
-def get_Test_Descriptors(path,out_path = "./"):
+def get_Test_Descriptors(path,persp_map, out_path = "./"):
     # We get the name of all the files in the directory
-    test_files = glob(path+"*")
+    test_files = glob(path+"*.avi")
     i = 1
-    for file in test_files:
-        name = file.split("/")[-1][:-4]
+    for file_path in test_files:
+        name = file_path.split("/")[-1][:-4]
         # We reset the file if it exists
         f = open(out_path+name,"w")
         f.close()
-        extract_descriptors(file,out_path+name)
+        extract_descriptors(file_path,persp_map, out_path+name)
         i += 1
-        print(file,": DONE",sep = "")
+        print(file_path,": DONE",sep = "")
 
-# Function to search for the maximun values of each descriptor on training 
+# Function to search for the maximun values of each descriptor on training
 def get_Max_Descriptors(des_file, n_descriptors = 7):
     # Max value of every descriptor on training
     maximos = [0 for i in np.arange(n_descriptors)]
     i = 0
     f = open(des_file)
     for line in f:
-        lista = string_To_List(line)
+        lista =  lista = np.fromstring(line[1:-2], dtype=float, sep=', ' )
         aux = max(lista)
         if aux > maximos[i]:
             maximos[i] = aux
@@ -537,13 +602,13 @@ def get_Max_Descriptors(des_file, n_descriptors = 7):
 
 ################## ONE CLASS SVM #####################
 
-# Function to get the normalized histograms of a set of descriptors 
+# Function to get the normalized histograms of a set of descriptors
 def get_Histograms(des_file, range_max, n_descriptors = 7):
     f = open(des_file)
     histograms = [[] for i in np.arange(n_descriptors)]
     i = 0
     for line in f:
-        lista = string_To_List(line)
+        lista = np.fromstring(line[1:-2], dtype=float, sep=', ' )
         h = np.histogram(lista, bins = 16, range = (0,range_max[i]))[0]
         norm = np.linalg.norm(h)
         if norm != 0:
@@ -559,7 +624,7 @@ def get_Histograms(des_file, range_max, n_descriptors = 7):
     return histograms
     
 def train_OC_SVM(samples, out_file = "svm.plk"):
-    svm = OneClassSVM(nu =0.01, kernel = "sigmoid", coef0 = 0.15).fit(samples)
+    svm = OneClassSVM(nu =0.01, verbose = False, kernel = "sigmoid").fit(samples)
     joblib.dump(svm, out_file)
 
 def test_OC_SVM(samples,in_file = "svm.plk"):
@@ -571,32 +636,41 @@ def test_OC_SVM(samples,in_file = "svm.plk"):
     
 escena = 1
 
+path_p_map = "Datasets/UMN/Training/Escena "+str(escena)+"/persp_map.npy"
+# if(os.path.isfile(path_p_map)):
+#     p_map = np.load(path_p_map)
+# else:
+p_map = np.identity(3)
+
 start = time.time()
-get_Training_Descriptors("Datasets/UMN/Training/Escena 1/","Training Descriptors/escena1_tra_descriptors")
-print(time.time()-start)
-#get_Training_Descriptors("Datasets/UMN/Training/Escena 2/","Training Descriptors/escena2_tra_descriptors")
-#get_Training_Descriptors("Datasets/UMN/Training/Escena 3/","Training Descriptors/escena3_tra_descriptors")
-get_Test_Descriptors("Datasets/UMN/Escenas Completas/Escena "+str(escena)+"/","Full Video Descriptors/Escena "+str(escena)+"/")
+#get_Training_Descriptors("Datasets/UMN/Training/Escena "+str(escena)+"/",p_map,
+#                        "Training Descriptors/escena"+str(escena)+"_tra_descriptors")
+print("Tiempo extracción en training:",time.time()-start)
+
+#get_Test_Descriptors("Datasets/UMN/Test/Escena "+str(escena)+"/", p_map,
+#                     "Full Video Descriptors/Escena "+str(escena)+"/")
+print("Tiempo extracción en test:",time.time()-start)
 
 gt = get_Ground_Truth("Datasets/UMN/ground_truth.txt")
 
 range_max = get_Max_Descriptors("Training Descriptors/escena"+str(escena)+"_tra_descriptors")
 hist = get_Histograms("Training Descriptors/escena"+str(escena)+"_tra_descriptors", range_max)
-# range_max = get_Max_Descriptors("Training Descriptors/escena0_tra_descriptors")
-# hist = get_Histograms("Training Descriptors/escena0_tra_descriptors", range_max)
-print(time.time()-start)
+
 train_OC_SVM(hist)
 
 total_labels = []
 total_predicted = np.array([])
 for d in glob("Full Video Descriptors/Escena "+str(escena)+"/*"):
     hist = get_Histograms(d, range_max)
-    limit = gt[d.split("/")[-1]]
-    labels = [1 if i < limit else -1 for i in np.arange(len(hist))]
+    n_fr_train = gt[d.split("/")[-1]][0]//2
+    begin_anom = n_fr_train
+    end_anom = gt[d.split("/")[-1]][1] - n_fr_train
+    labels = [1 if (i < begin_anom or i > end_anom)  else -1 for i in np.arange(len(hist))]
     predicted = test_OC_SVM(hist)
+    #print(predicted)
     
     score = accuracy_score(labels,predicted,normalize = False)
-    print(d.split("/")[-1],score," - ",len(hist))
+    print(d.split("/")[-1],score," - ",len(hist),"\t Prec: {:1.2f}".format(score/len(hist)))
     
     total_predicted = np.concatenate((total_predicted,predicted))
     total_labels += labels
@@ -604,26 +678,16 @@ for d in glob("Full Video Descriptors/Escena "+str(escena)+"/*"):
 print("Accuracy:",accuracy_score(total_labels,total_predicted))
 print("AUC:",roc_auc_score(total_labels,total_predicted))
 
-print(time.time()-start)
+print("Tiempo total:",time.time()-start)
 
 #L = 5
 #mm = 0.025
-#772 - 805
-#597 - 609
 # E1
-#Accuracy: 0.9681753889674681
-#AUC: 0.978975625823452
-# E3
-#Accuracy: 0.951818611242324
-#AUC: 0.9722070844686648
-
-# No uniformity
-# E1
-# Accuracy: 0.9809052333804809
-# AUC: 0.9882608695652174
+#Accuracy: 0.9432870370370371
+#AUC: 0.9581911262798635
 # E2
-# Accuracy: 0.8728564429201372
-# AUC: 0.852110923910289
+#Accuracy: 0.8360091743119266
+#AUC: 0.8140651275741833
 # E3
-# Accuracy: 0.9754369390647142
-# AUC: 0.9858310626702997
+#Accuracy: 
+#AUC: 
