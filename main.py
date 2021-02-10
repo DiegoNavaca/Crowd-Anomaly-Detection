@@ -147,11 +147,11 @@ def delete_row(arr, num):
     return arr[mask]
 
 @jit(nopython = True)
-def calculateMovement(features, trayectories, persp_map, min_motion = 1.0, erase_slow = False):
+def calculateMovement(features, trayectories, persp_map, min_motion = 1.0, erase_slow = False, t1 = -6):
     #velocity = np.array([np.linalg.norm(tracklet[0]-tracklet[-1]) for tracklet in trayectories])
     velocity = np.zeros(len(trayectories),dtype = numba.float64)
     for i in range(len(trayectories)):
-        velocity[i] = np.linalg.norm(np.dot(persp_map,trayectories[i][0])-np.dot(persp_map,trayectories[i][-1]) )
+        velocity[i] = np.linalg.norm(np.dot(persp_map,trayectories[i][t1])-np.dot(persp_map,trayectories[i][-1]) )
         
     if erase_slow:
         static_features = np.where(velocity < min_motion)[0]
@@ -235,13 +235,13 @@ def calculateStability(cliques, trayectories, t2 = -2):
 #     return conflict
 
 @jit(nopython = True)
-def auxCollectivenessAndConflict(clique,trayectories, k):
+def auxCollectivenessAndConflict(clique,trayectories, k, t1):
     collectiveness = 0
     conflict = 0
     k = int(k)
     for i in range(len(clique)):
         elem = int(clique[i])
-        dif = difAng((trayectories[k][0],trayectories[k][-1]),(trayectories[elem][0],trayectories[elem][-1]))
+        dif = difAng((trayectories[k][t1],trayectories[k][-1]),(trayectories[elem][t1],trayectories[elem][-1]))
         collectiveness += dif
         conflict += dif / np.linalg.norm(trayectories[k][-1] - trayectories[elem][-1])
     collectiveness /= (len(clique)+1)
@@ -249,14 +249,14 @@ def auxCollectivenessAndConflict(clique,trayectories, k):
 
     return collectiveness, conflict
 
-def calculateCollectivenessAndConflict(cliques, trayectories):
+def calculateCollectivenessAndConflict(cliques, trayectories,t1 = 0):
     # Initialization
     collectiveness = np.zeros(len(trayectories))
     conflict = collectiveness.copy()
     # For every feature point
     for k in range(len(cliques)):
         # We measure collectiveness and conflict
-        collectiveness[k], conflict[k] = auxCollectivenessAndConflict(np.array(cliques[k]),trayectories, k)
+        collectiveness[k], conflict[k] = auxCollectivenessAndConflict(np.array(cliques[k]),trayectories, k, t1)
 
     return collectiveness, conflict
 
@@ -364,7 +364,7 @@ def addClustersToImage(clusters, features, img):
 #################### DESCRIPTORS ###########################
 
 # Function to extract the descriptors of a video
-def extract_descriptors(video_file, persp_map, out_file = "descriptors", L = 5, min_motion = 0.05, fast_threshold = 20):
+def extract_descriptors(video_file, persp_map, out_file = "descriptors"):
     #FAST algorithm for feature detection
     fast = cv.FastFeatureDetector_create()
     fast.setThreshold(fast_threshold)
@@ -405,7 +405,7 @@ def extract_descriptors(video_file, persp_map, out_file = "descriptors", L = 5, 
             prev_aux = prev_aux.reshape(-1, 1, 2)
 
             trayectories_aux = np.array(trayectories_aux)
-            prev, velocity, trayectories = calculateMovement(prev,trayectories_aux, persp_map, min_motion*L, erase_slow = True)
+            prev, velocity, trayectories = calculateMovement(prev,trayectories_aux, persp_map, min_motion*L, erase_slow = True, t1 =  t1)
             trayectories = trayectories.tolist()
             trayectories_aux = []
             for p in prev_aux:
@@ -417,7 +417,7 @@ def extract_descriptors(video_file, persp_map, out_file = "descriptors", L = 5, 
             #Metrics analysis
             if len(trayectories) > 0:
                 arr_trayectories = np.array(trayectories)
-                _, velocity, _ = calculateMovement(prev,arr_trayectories, persp_map, min_motion*L)
+                _, velocity, _ = calculateMovement(prev,arr_trayectories, persp_map, min_motion*L, t1 = t1)
                 
 
             if len(prev) > 10:
@@ -439,7 +439,7 @@ def extract_descriptors(video_file, persp_map, out_file = "descriptors", L = 5, 
                 # Interactive Behaviours
                 stability = calculateStability(cliques,arr_trayectories)
 
-                collectiveness, conflict = calculateCollectivenessAndConflict(cliques,arr_trayectories)
+                collectiveness, conflict = calculateCollectivenessAndConflict(cliques,arr_trayectories, t1 = t1)
 
                 density = calculateDensity(cliques,prev)
 
@@ -447,7 +447,7 @@ def extract_descriptors(video_file, persp_map, out_file = "descriptors", L = 5, 
                 uniformity = calculateUniformity(cliques, clusters, prev)
 
             else:
-                print("None detected")
+                #print("None detected")
                 velocity = np.zeros(1)
                 dir_var = velocity.copy()
                 collectiveness = velocity.copy()
@@ -628,7 +628,7 @@ def get_Histograms(des_file, range_max, n_descriptors = 7):
     return histograms
     
 def train_OC_SVM(samples, out_file = "svm.plk"):
-    svm = OneClassSVM(nu =0.01, verbose = False, kernel = "rbf", gamma = 1).fit(samples)
+    svm = OneClassSVM(nu =0.01, verbose = False, kernel = "sigmoid").fit(samples)
     joblib.dump(svm, out_file)
 
 def test_OC_SVM(samples,in_file = "svm.plk"):
@@ -637,8 +637,13 @@ def test_OC_SVM(samples,in_file = "svm.plk"):
     return svm.predict(samples)
 
 ################################################################
-    
-escena = 2
+
+L = 20
+t1 = -6
+min_motion = 0.05
+fast_threshold = 20
+
+escena = 1
 
 path_p_map = "Datasets/UMN/Training/Escena "+str(escena)+"/persp_map.npy"
 # if(os.path.isfile(path_p_map)):
@@ -647,10 +652,10 @@ path_p_map = "Datasets/UMN/Training/Escena "+str(escena)+"/persp_map.npy"
 p_map = np.identity(3)
 
 start = time.time()
-#get_Training_Descriptors("Datasets/UMN/Training/Escena "+str(escena)+"/",p_map, "Training Descriptors/escena"+str(escena)+"_tra_descriptors")
+get_Training_Descriptors("Datasets/UMN/Training/Escena "+str(escena)+"/",p_map, "Training Descriptors/escena"+str(escena)+"_tra_descriptors")
 print("Tiempo extracción en training:",time.time()-start)
 
-#get_Test_Descriptors("Datasets/UMN/Test/Escena "+str(escena)+"/", p_map, "Full Video Descriptors/Escena "+str(escena)+"/")
+get_Test_Descriptors("Datasets/UMN/Test/Escena "+str(escena)+"/", p_map, "Full Video Descriptors/Escena "+str(escena)+"/")
 print("Tiempo extracción en test:",time.time()-start)
 
 gt = get_Ground_Truth("Datasets/UMN/ground_truth.txt")
@@ -667,7 +672,7 @@ for d in glob("Full Video Descriptors/Escena "+str(escena)+"/*"):
     n_fr_train = gt[d.split("/")[-1]][0]//2
     begin_anom = n_fr_train
     end_anom = gt[d.split("/")[-1]][1] - n_fr_train
-    labels = [1 if (i < begin_anom or i > end_anom)  else -1 for i in np.arange(len(hist))]
+    labels = [1 if (i < (begin_anom-L) or i > (end_anom-L))  else -1 for i in np.arange(len(hist))]
     predicted = test_OC_SVM(hist)
     #print(predicted)
     
