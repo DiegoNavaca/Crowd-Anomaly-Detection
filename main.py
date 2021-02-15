@@ -163,7 +163,7 @@ def calculateMovement(features, trayectories, persp_map, min_motion = 1.0, erase
         velocity = delete_row(velocity,static_features)
         trayectories = delete_row(trayectories,static_features)
 
-    velocity = velocity / np.array([len(tracklet) for tracklet in trayectories])
+    #velocity = velocity / (-1+t1)#np.array([len(tracklet) for tracklet in trayectories])
 
     return features, velocity, trayectories
 
@@ -345,11 +345,25 @@ def addClustersToImage(clusters, features, img):
         point = (int(point[0]), int(point[1]))
         color = 255 * (clusters[i]+1) / n_clusters
         cv.circle(img,point,1,(color,0,color),2)
+
+def addPrediction(img,model, data, range_max, tam_border = 5):
+    histograms = [np.histogram(data[i], bins = n_bins, range = (0,range_max[i]))[0] for i in range(len(range_max))]
+    norms = [np.linalg.norm(h) for h in histograms]
+    histograms = [histograms[i] / norms[i] if norms[i] != 0 else histograms[i] for i in range(len(histograms))]
+    histograms = np.ravel(histograms).reshape(1,-1)
+    
+    prediction = model.predict(histograms)
+
+    if prediction[0] == -1:
+        img = cv.copyMakeBorder(img, tam_border, tam_border, tam_border, tam_border, cv.BORDER_CONSTANT, None, (0,0,255))
+
+    return img
+    
             
 #################### DESCRIPTORS ###########################
 
 # Function to extract the descriptors of a video
-def extract_descriptors(video_file, persp_map, L , t1 , t2 , min_motion , fast_threshold, out_file = "descriptors"):
+def extract_descriptors(video_file, persp_map, L , t1 , t2 , min_motion , fast_threshold, out_file = "descriptors", model = None, range_max = None):
     #FAST algorithm for feature detection
     fast = cv.FastFeatureDetector_create()
     fast.setThreshold(fast_threshold)
@@ -389,9 +403,7 @@ def extract_descriptors(video_file, persp_map, L , t1 , t2 , min_motion , fast_t
             prev_aux = cv.KeyPoint_convert(prev_key)
             prev_aux = prev_aux.reshape(-1, 1, 2)
 
-            trayectories_aux = np.array(trayectories_aux)
-            prev, velocity, trayectories = calculateMovement(prev,trayectories_aux, persp_map, min_motion*L, erase_slow = True, t1 =  t1)
-            trayectories = trayectories.tolist()
+            trayectories = trayectories_aux.copy()
             trayectories_aux = []
             for p in prev_aux:
                 a, b = p.ravel()
@@ -402,7 +414,8 @@ def extract_descriptors(video_file, persp_map, L , t1 , t2 , min_motion , fast_t
             #Metrics analysis
             if len(trayectories) > 0:
                 arr_trayectories = np.array(trayectories)
-                _, velocity, _ = calculateMovement(prev,arr_trayectories, persp_map, min_motion*(-t1), t1 = t1)
+                prev, velocity, arr_trayectories = calculateMovement(prev,arr_trayectories, persp_map, min_motion*(-t1), t1 = t1, erase_slow = True)
+                trayectories = arr_trayectories.tolist()
                 
 
             if len(prev) > 10:
@@ -430,6 +443,16 @@ def extract_descriptors(video_file, persp_map, L , t1 , t2 , min_motion , fast_t
                 clusters = getClusters(prev)
                 uniformity = calculateUniformity(cliques, clusters, prev)
 
+                # Image representation for checking results
+                #addTrayectoriesToImage(trayectories,frame)
+                #addDelaunayToImage(delaunay,frame)
+                #addCliqueToImage(cliques, -1, frame,trayectories)
+                #addClustersToImage(clusters,prev,frame)
+
+                if model is not None:
+                    frame = addPrediction(frame,model,
+                                      (velocity, dir_var, stability, collectiveness, conflict, density, uniformity), range_max)
+
             else:
                 #print("None detected")
                 velocity = np.zeros(1)
@@ -451,11 +474,7 @@ def extract_descriptors(video_file, persp_map, L , t1 , t2 , min_motion , fast_t
             file.write(str(density.tolist())+"\n")
             file.write(str(uniformity.tolist())+"\n")                
 
-            # Image representation for checking results
-            #addTrayectoriesToImage(trayectories,frame)
-            addDelaunayToImage(delaunay,frame)
-            #addCliqueToImage(cliques, -1, frame,trayectories)
-            #addClustersToImage(clusters,prev,frame)
+            
             #if frame.shape[0] < 512:
             #    frame = cv.resize(frame,(512,int(512*frame.shape[0]/frame.shape[1])))
             cv.imshow("Crowd", frame)            
@@ -526,7 +545,7 @@ def extract_descriptors(video_file, persp_map, L , t1 , t2 , min_motion , fast_t
     file.close()
 
 # Function to get the descriptors of a set of training videos and store them on a single file
-def get_Training_Descriptors(path,persp_map, L , t1 , t2 , min_motion , fast_threshold, out_file = "training_descriptors"):
+def get_Training_Descriptors(path,persp_map, L , t1 , t2 , min_motion , fast_threshold, out_file = "training_descriptors", verbose = True):
     # We reset the file if it exists
     f = open(out_file,"w")
     
@@ -554,10 +573,11 @@ def get_Training_Descriptors(path,persp_map, L , t1 , t2 , min_motion , fast_thr
     training_files = glob(path+"*.avi")
     for file_path in training_files:
         extract_descriptors(file_path,persp_map, L , t1 , t2 , min_motion , fast_threshold, out_file)
-        print(file_path,": DONE",sep = "")
+        if verbose:
+            print(file_path,": DONE",sep = "")
 
 # Function to get the descriptors of a set of training videos and store them on a single file
-def get_Test_Descriptors(path,persp_map, L , t1 , t2 , min_motion , fast_threshold, out_path = "./"):
+def get_Test_Descriptors(path,persp_map, L , t1 , t2 , min_motion , fast_threshold, out_path = "./", verbose = True, model = None, range_max = None):
     # We get the name of all the files in the directory
     test_files = glob(path+"*.avi")
     i = 1
@@ -566,9 +586,10 @@ def get_Test_Descriptors(path,persp_map, L , t1 , t2 , min_motion , fast_thresho
         # We reset the file if it exists
         f = open(out_path+name,"w")
         f.close()
-        extract_descriptors(file_path,persp_map, L , t1 , t2 , min_motion , fast_threshold, out_path+name)
+        extract_descriptors(file_path, persp_map, L , t1 , t2 , min_motion , fast_threshold, out_path+name, model, range_max)
         i += 1
-        print(file_path,": DONE",sep = "")
+        if verbose:
+            print(file_path,": DONE",sep = "")
 
 # Function to search for the maximun values of each descriptor on training
 def get_Max_Descriptors(des_file, n_descriptors = 7):
@@ -591,9 +612,9 @@ def get_Max_Descriptors(des_file, n_descriptors = 7):
 ################## ONE CLASS SVM #####################
 
 # Function to get the normalized histograms of a set of descriptors
-def get_Histograms(des_file, range_max, n_descriptors = 7):
+def get_Histograms(des_file, range_max):
     f = open(des_file)
-    histograms = [[] for i in np.arange(n_descriptors)]
+    histograms = [[] for i in np.arange(len(range_max))]
     i = 0
     for line in f:
         lista = np.fromstring(line[1:-2], dtype=float, sep=', ' )
@@ -603,29 +624,24 @@ def get_Histograms(des_file, range_max, n_descriptors = 7):
             histograms[i].append(h / np.linalg.norm(h))
         else:
             histograms[i].append(h)
-        
-        i = (i+1) % n_descriptors
+
+        i = (i+1) % len(range_max)
 
     histograms = [np.concatenate(x) for x in zip(*histograms)]
     f.close()
         
     return histograms
-
-def generate_empty_example(range_max):
-    example = np.concatenate([np.histogram(np.zeros(1),bins = n_bins, range = (0,i))[0] for i in range_max])
-    
-    return example
     
 def train_OC_SVM(samples, out_file = "svm.plk"):
     svm = OneClassSVM(nu =0.01, verbose = False, kernel = "sigmoid").fit(samples)
     joblib.dump(svm, out_file)
 
-def test_OC_SVM(samples, range_max, in_file = "svm.plk"):
-    svm = joblib.load(in_file)
+    return svm
 
-    empty = generate_empty_example(range_max)
+def test_OC_SVM(samples, range_max, model):
+    empty = np.concatenate([np.histogram(np.zeros(1),bins = n_bins, range = (0,i))[0] for i in range_max])
 
-    prediction = svm.predict(samples)
+    prediction = model.predict(samples)
     
     prediction = [1 if (samples[i] == empty).all() else prediction[i] for i in range(len(prediction))]
 
@@ -633,44 +649,57 @@ def test_OC_SVM(samples, range_max, in_file = "svm.plk"):
 
 ################################################################
 
-def entrenar_modelo(L = 20, t1 = -5, t2 = 9, min_motion = 0.02, fast_threshold = 20, verbose = True):
-    dir_model = "Models/model_UMN_"+str(escena)+".plk"
+def entrenar_modelo(escena, dataset, L = 20, t1 = -5, t2 = 9, min_motion = 0.02, fast_threshold = 20, verbose = True):
+    dir_model = "Models/model_"+dataset+"_"+str(escena)+".plk"
 
-    path_p_map = "Datasets/UMN/Training/Escena "+str(escena)+"/persp_map.npy"
+    path_p_map = "Datasets/"+dataset+"/Training/Escena "+str(escena)+"/persp_map.npy"
     # if(os.path.isfile(path_p_map)):
     #     p_map = np.load(path_p_map)
     # else:
     p_map = np.identity(3)
 
     start = time.time()
-    get_Training_Descriptors("Datasets/UMN/Training/Escena "+str(escena)+"/",p_map,
-                             L, t1, t2, min_motion, fast_threshold, "Training Descriptors/escena"+str(escena)+"_tra_descriptors")
+    get_Training_Descriptors("Datasets/"+dataset+"/Training/Escena "+str(escena)+"/",p_map,
+                             L, t1, t2, min_motion, fast_threshold, "Training Descriptors/escena"+str(escena)+"_tra_descriptors", verbose = verbose)
     if verbose:
         print("Tiempo extracción en training: {:4.5}".format(time.time()-start))
 
-    get_Test_Descriptors("Datasets/UMN/Validation/Escena "+str(escena)+"/", p_map,
-                         L, t1, t2, min_motion, fast_threshold, "Validation Descriptors/Escena "+str(escena)+"/")
+    acc, auc = evaluar_modelo(escena = escena, dataset = dataset, dir_model = dir_model, L = L, t1 = t1, t2 = t2, min_motion = min_motion, fast_threshold = fast_threshold, verbose = verbose, set_usado = "Validation")
 
-    if verbose:
-        print("Tiempo después de extracción en validación: {:4.5}".format(time.time()-start))
+    return acc, auc
 
-    gt = get_Ground_Truth("Datasets/UMN/ground_truth.txt")
+def evaluar_modelo(escena, dataset, dir_model, L = 20, t1 = -5, t2 = 9, min_motion = 0.02, fast_threshold = 20, verbose = True, set_usado = "Validation"):
+
+    path_p_map = "Datasets/"+dataset+"/Training/Escena "+str(escena)+"/persp_map.npy"
+    # if(os.path.isfile(path_p_map)):
+    #     p_map = np.load(path_p_map)
+    # else:
+    p_map = np.identity(3)
 
     range_max = get_Max_Descriptors("Training Descriptors/escena"+str(escena)+"_tra_descriptors")
     hist = get_Histograms("Training Descriptors/escena"+str(escena)+"_tra_descriptors", range_max)
 
-    train_OC_SVM(hist, dir_model)
+    model = train_OC_SVM(hist, dir_model)
+
+    start = time.time()
+    get_Test_Descriptors("Datasets/"+dataset+"/"+set_usado+"/Escena "+str(escena)+"/", p_map,
+                         L, t1, t2, min_motion, fast_threshold,
+                         set_usado+" Descriptors/Escena "+str(escena)+"/", verbose, model = model, range_max = range_max)
+
+    if verbose:
+        print("Tiempo después de extracción en test: {:4.5}".format(time.time()-start))
+
+    gt = get_Ground_Truth("Datasets/"+dataset+"/ground_truth.txt")
 
     total_labels = []
     total_predicted = np.array([])
-    for d in glob("Validation Descriptors/Escena "+str(escena)+"/*"):
+    for d in glob(set_usado+" Descriptors/Escena "+str(escena)+"/*"):
         hist = get_Histograms(d, range_max)
         n_fr_train = gt[d.split("/")[-1]][0]//2
         begin_anom = n_fr_train
         end_anom = gt[d.split("/")[-1]][1] - n_fr_train
         labels = [1 if (i < (begin_anom-L) or i > (end_anom-L))  else -1 for i in np.arange(len(hist))]
-        predicted = test_OC_SVM(hist, range_max, dir_model)
-        #print(predicted)
+        predicted = test_OC_SVM(hist, range_max, model)
     
         score = accuracy_score(labels,predicted,normalize = False)
         if verbose:
@@ -679,46 +708,49 @@ def entrenar_modelo(L = 20, t1 = -5, t2 = 9, min_motion = 0.02, fast_threshold =
         total_predicted = np.concatenate((total_predicted,predicted))
         total_labels += labels
 
-    print("Accuracy: {:1.3f}".format(accuracy_score(total_labels,total_predicted)))
-    print("AUC: {:1.3f}".format(roc_auc_score(total_labels,total_predicted)))
-
+    acc = accuracy_score(total_labels,total_predicted)
+    auc = roc_auc_score(total_labels,total_predicted)
+        
     if verbose:
+        print("Accuracy: {:1.3f}".format(acc))
+        print("AUC: {:1.3f}".format(auc))
         print("Tiempo total: {:4.5}".format(time.time()-start))
+
+    return acc, auc
 
 ######################################################
 
 n_bins = 16
-escena = 1
+escena = 2
 
-val_L = (5,10,15,20)
-val_t1 = (-3,-4,-5)
+val_L = (5,10,20)
+val_t1 = (-3,-5)
 val_t2 = (1,2,4)
-val_motion = (0.01,0.025,0.05,0.075,0.1)
+val_motion = (0.01,0.02,0.04)
+
 
 for L in val_L:
     for t1 in val_t1:
         for t2 in val_t2:
+            if t2 > L//3:
+                break
             for motion in val_motion:
                 print("L:",L,"t1:",t1,"t2:",t2,"Min Motion:",motion)
-                entrenar_modelo(L, t1, t2, motion , verbose = False)
+                acc, auc = entrenar_modelo(escena, "UMN", L, t1, t2, motion , verbose = False)
+                print("Accuracy: {:1.3f}".format(acc))
+                print("AUC: {:1.3f}".format(auc))
 
-# L = 20
-# t1 = -5
-# t2 = 5
-# min_motion = 0.03
-# fast_threshold = 20
+# acc, auc = entrenar_modelo(escena, "UMN", 10, -3, 1, 0.04)
+# dir_model = "Models/model_UMN_"+str(escena)+".plk"
+# acc, auc = evaluar_modelo(escena, "UMN", dir_model, 10, -3, 1, 0.04, set_usado = "Test")
+
 # E1
-#Accuracy: 0.975
-#AUC: 0.969
-# E2
-#Accuracy: 0.796
-#AUC: 0.814
+#L: 10 t1: -3 t2: 1 Min Motion: 0.04
+#Accuracy: 0.973
+#AUC: 0.964
 
-# L = 20
-# t1 = -5
-# t2 = 5
-# min_motion = 0.1
-# fast_threshold = 20
+# E2
+
+
 # E3
-#Accuracy: 0.975
-#AUC: 0.982
+
