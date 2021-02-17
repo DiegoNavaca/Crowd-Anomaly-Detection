@@ -4,6 +4,7 @@ import cv2 as cv
 import numpy as np
 from sklearn.cluster import DBSCAN
 from sklearn.svm import OneClassSVM
+from sklearn.svm import NuSVC
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import roc_auc_score
 from collections import namedtuple
@@ -363,7 +364,7 @@ def addPrediction(img,model, data, range_max, tam_border = 5):
 #################### DESCRIPTORS ###########################
 
 # Function to extract the descriptors of a video
-def extract_descriptors(video_file, persp_map, L , t1 , t2 , min_motion , fast_threshold, out_file = "descriptors", model = None, range_max = None):
+def extract_descriptors(video_file, persp_map, L , t1 , t2 , min_motion , fast_threshold, out_file = "descriptors", model = None, range_max = None, min_puntos = 3):
     #FAST algorithm for feature detection
     fast = cv.FastFeatureDetector_create()
     fast.setThreshold(fast_threshold)
@@ -418,7 +419,7 @@ def extract_descriptors(video_file, persp_map, L , t1 , t2 , min_motion , fast_t
                 trayectories = arr_trayectories.tolist()
                 
 
-            if len(prev) > 10:
+            if len(prev) > min_puntos:
 
                 dir_var = calculateDirectionVar(arr_trayectories, t2 = t2)                
 
@@ -545,49 +546,61 @@ def extract_descriptors(video_file, persp_map, L , t1 , t2 , min_motion , fast_t
     file.close()
 
 # Function to get the descriptors of a set of training videos and store them on a single file
-def get_Training_Descriptors(path,persp_map, L , t1 , t2 , min_motion , fast_threshold, out_file = "training_descriptors", verbose = True):
+def get_Training_Descriptors(path,persp_map, L , t1 , t2 , min_motion , fast_threshold, out_file = "training_descriptors", verbose = True, gt = None):
     # We reset the file if it exists
     f = open(out_file,"w")
-    
-    velocity = np.zeros(1)
-    dir_var = velocity.copy()
-    collectiveness = velocity.copy()
-    conflict = velocity.copy()
-    stability = velocity.copy()
-    density = velocity.copy()
-    uniformity = velocity.copy()
+
+    if gt is None:
+        velocity = np.zeros(1)
+        dir_var = velocity.copy()
+        collectiveness = velocity.copy()
+        conflict = velocity.copy()
+        stability = velocity.copy()
+        density = velocity.copy()
+        uniformity = velocity.copy()
                 
                                 
-    # Buscar una forma mejor
+        # Buscar una forma mejor
                 
-    f.write(str(velocity.tolist())+"\n")
-    f.write(str(dir_var.tolist())+"\n")
-    f.write(str(stability.tolist())+"\n")
-    f.write(str(collectiveness.tolist())+"\n")
-    f.write(str(conflict.tolist())+"\n")
-    f.write(str(density.tolist())+"\n")
-    f.write(str(uniformity.tolist())+"\n")
+        f.write(str(velocity.tolist())+"\n")
+        f.write(str(dir_var.tolist())+"\n")
+        f.write(str(stability.tolist())+"\n")
+        f.write(str(collectiveness.tolist())+"\n")
+        f.write(str(conflict.tolist())+"\n")
+        f.write(str(density.tolist())+"\n")
+        f.write(str(uniformity.tolist())+"\n")
     
     f.close()
     # We get the name of all the files in the directory
     training_files = glob(path+"*.avi")
+    etiquetas = []
     for file_path in training_files:
-        extract_descriptors(file_path,persp_map, L , t1 , t2 , min_motion , fast_threshold, out_file)
+        extract_descriptors(file_path,persp_map, L , t1 , t2 , min_motion , fast_threshold, out_file+".data")
+        
         if verbose:
             print(file_path,": DONE",sep = "")
 
 # Function to get the descriptors of a set of training videos and store them on a single file
-def get_Test_Descriptors(path,persp_map, L , t1 , t2 , min_motion , fast_threshold, out_path = "./", verbose = True, model = None, range_max = None):
+def get_Test_Descriptors(path,persp_map, L , t1 , t2 , min_motion , fast_threshold, out_path = "./", verbose = True, model = None, range_max = None, gt = None):
+    
     # We get the name of all the files in the directory
-    test_files = glob(path+"*.avi")
-    i = 1
+    test_files = glob(path+"*.mp4")
+    
     for file_path in test_files:
         name = file_path.split("/")[-1][:-4]
         # We reset the file if it exists
-        f = open(out_path+name,"w")
+        f = open(out_path+name+".data","w")
         f.close()
-        extract_descriptors(file_path, persp_map, L , t1 , t2 , min_motion , fast_threshold, out_path+name, model, range_max)
-        i += 1
+        extract_descriptors(file_path, persp_map, L , t1 , t2 , min_motion , fast_threshold, out_path+name+".data", model, range_max)
+        if gt is not None:
+            hist = get_Histograms(out_path+name+".data", np.zeros(7))
+            begin_anom = gt[name][0]
+            end_anom = gt[name][1]
+            labels = [1 if (i < (begin_anom-L) or i > (end_anom-L))  else -1 for i in np.arange(len(hist))]
+            labels_file = open(out_path+name+".labels","w")
+            labels_file.write(str(labels))
+            labels_file.close()
+            
         if verbose:
             print(file_path,": DONE",sep = "")
 
@@ -606,6 +619,26 @@ def get_Max_Descriptors(des_file, n_descriptors = 7):
         i = (i+1) % n_descriptors
         
     f.close()
+
+    return maximos
+
+def get_Max_Descriptors_dir(directory, n_descriptors = 7):
+    # Max value of every descriptor on training
+    maximos = [0 for i in np.arange(n_descriptors)]
+    for des_file in glob(directory+"*.data"):
+        labels_file = open(des_file[:-5]+".labels")
+        labels = eval(labels_file.read())
+        labels_file.close()
+        i = 0
+        f = open(des_file)
+        for line in f:
+            lista = np.fromstring(line[1:-2], dtype=float, sep=', ' )
+            aux = max(lista)
+            if aux > maximos[i%n_descriptors] and labels[i//n_descriptors] == 1:
+                maximos[i%n_descriptors] = aux
+            # Descriptors are stored in sequential order so we have to rotate in each iteration
+            i = i+1
+        f.close()
 
     return maximos
 
@@ -638,7 +671,14 @@ def train_OC_SVM(samples, out_file = "svm.plk"):
 
     return svm
 
-def test_OC_SVM(samples, range_max, model):
+def train_BIN_SVM(samples, labels, out_file = "svm.plk", nu = 0.1):
+    svm = NuSVC(nu = nu, kernel = 'rbf')
+    svm.fit(samples, labels)
+    joblib.dump(svm, out_file)
+
+    return svm
+
+def test_SVM(samples, range_max, model):
     empty = np.concatenate([np.histogram(np.zeros(1),bins = n_bins, range = (0,i))[0] for i in range_max])
 
     prediction = model.predict(samples)
@@ -670,10 +710,6 @@ def entrenar_modelo(escena, dataset, L = 20, t1 = -5, t2 = 9, min_motion = 0.02,
 
 def evaluar_modelo(escena, dataset, dir_model, L = 20, t1 = -5, t2 = 9, min_motion = 0.02, fast_threshold = 20, verbose = True, set_usado = "Validation"):
 
-    path_p_map = "Datasets/"+dataset+"/Training/Escena "+str(escena)+"/persp_map.npy"
-    # if(os.path.isfile(path_p_map)):
-    #     p_map = np.load(path_p_map)
-    # else:
     p_map = np.identity(3)
 
     range_max = get_Max_Descriptors("Training Descriptors/escena"+str(escena)+"_tra_descriptors")
@@ -699,7 +735,7 @@ def evaluar_modelo(escena, dataset, dir_model, L = 20, t1 = -5, t2 = 9, min_moti
         begin_anom = n_fr_train
         end_anom = gt[d.split("/")[-1]][1] - n_fr_train
         labels = [1 if (i < (begin_anom-L) or i > (end_anom-L))  else -1 for i in np.arange(len(hist))]
-        predicted = test_OC_SVM(hist, range_max, model)
+        predicted = test_SVM(hist, range_max, model)
     
         score = accuracy_score(labels,predicted,normalize = False)
         if verbose:
@@ -718,39 +754,120 @@ def evaluar_modelo(escena, dataset, dir_model, L = 20, t1 = -5, t2 = 9, min_moti
 
     return acc, auc
 
+####################################################################    
+
+def entrenar_modelo_binario(escena, dataset, L, t1, t2, min_motion, fast_threshold, verbose = True):
+    dir_model = "Models/model_"+dataset+"_"+str(escena)+".plk"
+
+    p_map = np.identity(3)
+
+    gt = get_Ground_Truth("Datasets/"+dataset+"/ground_truth.txt")
+    
+    start = time.time()
+    get_Test_Descriptors("Datasets/"+dataset+"/Escenas Completas/Escena "+str(escena)+"/Training/",p_map,
+                             L, t1, t2, min_motion, fast_threshold, "Training Descriptors/Escena "+str(escena)+"/", verbose = verbose, gt = gt)
+    if verbose:
+        print("Tiempo extracción en training: {:4.5}".format(time.time()-start))
+
+    acc, auc = evaluar_modelo_binario(escena = escena, dataset = dataset, dir_model = dir_model, gt = gt, L = L, t1 = t1, t2 = t2,
+                              min_motion = min_motion, fast_threshold = fast_threshold, verbose = verbose, set_usado = "Validation")
+
+    return acc, auc
+
+def evaluar_modelo_binario(escena, dataset, dir_model, gt, L, t1, t2, min_motion, fast_threshold, verbose = True,
+                           set_usado = "Validation"):
+
+    p_map = np.identity(3)
+
+    range_max = get_Max_Descriptors_dir("Training Descriptors/Escena "+str(escena)+"/")
+    
+    h = []
+    lab = []
+    hist_tr = []
+    labels_tr = []
+    
+    for d in glob("Training Descriptors/Escena "+str(escena)+"/*"):
+        if d[-5:] == ".data":
+            h = get_Histograms(d, range_max)
+            hist_tr = hist_tr+h
+        elif d[-7:] == ".labels":
+            f = open(d)
+            lab = eval(f.read())
+            f.close()
+            labels_tr = labels_tr+lab
+
+    start = time.time()
+    get_Test_Descriptors("Datasets/"+dataset+"/Escenas Completas/Escena "+str(escena)+"/Test/", p_map,
+                         L, t1, t2, min_motion, fast_threshold,
+                         set_usado+" Descriptors/Escena "+str(escena)+"/", verbose, range_max = range_max)
+            
+    for nu in (0.1, 0.01, 0.001):
+        print("nu:",nu)
+        model = train_BIN_SVM(hist_tr, labels_tr, dir_model, nu = nu)
+
+        if verbose:
+            print("Tiempo de extracción en test: {:4.5}".format(time.time()-start))
+
+        total_labels = []
+        total_predicted = np.array([])
+        for d in glob(set_usado+" Descriptors/Escena "+str(escena)+"/*"):
+            hist = get_Histograms(d, range_max)
+            name = d.split("/")[-1][:-5]
+            begin_anom = gt[name][0]
+            end_anom = gt[name][1]
+            labels = [1 if (i < (begin_anom-L) or i > (end_anom-L))  else -1 for i in np.arange(len(hist))]
+            predicted = test_SVM(hist, range_max, model)
+            print([(i+L,labels[i]) for i in range(len(labels)) if predicted[i] != labels[i]])
+    
+            score = accuracy_score(labels,predicted,normalize = False)
+            if verbose:
+                print(d.split("/")[-1],score," - ",len(hist),"\t Prec: {:1.2f}".format(score/len(hist)))
+    
+            total_predicted = np.concatenate((total_predicted,predicted))
+            total_labels += labels
+
+        acc = accuracy_score(total_labels,total_predicted)
+        auc = roc_auc_score(total_labels,total_predicted)
+        
+        print("Accuracy: {:1.3f}".format(acc))
+        print("AUC: {:1.3f}".format(auc))
+
+    return acc, auc
+
 ######################################################
 
 n_bins = 16
-escena = 2
+escena = 1
 
-val_L = (5,10,20)
-val_t1 = (-3,-5)
+val_L = (5,10,15)
+val_t1 = (-3,-4,-5)
 val_t2 = (1,2,4)
-val_motion = (0.01,0.02,0.04)
+val_motion = (0.01,0.02, 0.04)
 
+# for L in val_L:
+#     for t1 in val_t1:
+#         for t2 in val_t2:
+#             if t2 > L//3:
+#                 break
+#             for motion in val_motion:
+#                 print("L:",L,"t1:",t1,"t2:",t2,"Min Motion:",motion)
+#                 acc, auc = entrenar_modelo_binario(escena, "UMN", L, t1, t2, motion, 20, verbose = False)
+#                 #print("Accuracy: {:1.3f}".format(acc))
+#                 #print("AUC: {:1.3f}".format(auc))
 
-for L in val_L:
-    for t1 in val_t1:
-        for t2 in val_t2:
-            if t2 > L//3:
-                break
-            for motion in val_motion:
-                print("L:",L,"t1:",t1,"t2:",t2,"Min Motion:",motion)
-                acc, auc = entrenar_modelo(escena, "UMN", L, t1, t2, motion , verbose = False)
-                print("Accuracy: {:1.3f}".format(acc))
-                print("AUC: {:1.3f}".format(auc))
-
-# acc, auc = entrenar_modelo(escena, "UMN", 10, -3, 1, 0.04)
-# dir_model = "Models/model_UMN_"+str(escena)+".plk"
-# acc, auc = evaluar_modelo(escena, "UMN", dir_model, 10, -3, 1, 0.04, set_usado = "Test")
+acc, auc = entrenar_modelo_binario(escena, "UMN", 5, -5, 1, 0.04, 20)
 
 # E1
-#L: 10 t1: -3 t2: 1 Min Motion: 0.04
-#Accuracy: 0.973
-#AUC: 0.964
+# L: 5 t1: -5 t2: 1 Min Motion: 0.04
+# nu: 0.01
+# Accuracy: 0.996
+# AUC: 0.989
 
 # E2
-
+# L: 15 t1: -5 t2: 1 Min Motion: 0.02
+# nu: 0.001
+# Accuracy: 0.947
+# AUC: 0.888
 
 # E3
 
