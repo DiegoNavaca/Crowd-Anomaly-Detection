@@ -5,7 +5,7 @@ from sklearn.svm import NuSVC
 from utils import np
 from files import read_Labels
 
-def get_Max_Descriptors(files, n_descriptors = 7):
+def get_Max_Descriptors(files, n_descriptors = 8):
     # Max value of every descriptor on training
     maximos = [0 for i in np.arange(n_descriptors)]
     for des_file in files:
@@ -49,11 +49,9 @@ def prepare_Hist_and_Labels(files, range_max):
     hist = []
     labels = []
     for f in files:
-        h = get_Histograms(f, range_max)
-        hist = hist+h
+        hist += get_Histograms(f, range_max)
         
-        lab = read_Labels(f+".labels")
-        labels = labels+lab
+        labels += read_Labels(f+".labels")
 
     return hist, labels
 

@@ -1,18 +1,16 @@
-import cv2 as cv
-import numpy as np
 from sklearn.cluster import DBSCAN
 from collections import namedtuple
 import numba
 from numba import jit
 from itertools import combinations
 
+from utils import np
+from utils import cv
+from utils import imgContains
 from visualization import addPrediction
+from visualization import addDelaunayToImage
 
 ############# AUXILIARY FUNCTIONS #############
-
-@jit(nopython = True)
-def imgContains(img,pt):
-    return ( pt[0] >= 0 and pt[0] < img.shape[1] and pt[1] >= 0 and pt[1] < img.shape[0] )
 
 @jit(nopython = True)
 def direction(pt0,pt1):
@@ -115,21 +113,27 @@ def delete_row(arr, num):
 
 @jit(nopython = True)
 def calculateMovement(features, trayectories, min_motion = 1.0, erase_slow = False, t1 = -6):
-    #velocity = np.array([np.linalg.norm(tracklet[0]-tracklet[-1]) for tracklet in trayectories])
-    velocity = np.zeros(len(trayectories),dtype = numba.float64)
+    velocity_x = np.zeros(len(trayectories),dtype = numba.float64)
+    velocity_y = velocity_x.copy()
+    #velocity = velocity_x.copy()
     for i in range(len(trayectories)):
-        velocity[i] = np.linalg.norm(trayectories[i][t1]-trayectories[i][-1]) 
+        velocity_x[i] = abs(trayectories[i][t1][0]-trayectories[i][-1][0])
+        velocity_y[i] = abs(trayectories[i][t1][1]-trayectories[i][-1][1])
+
+        #velocity[i] = np.linalg.norm(trayectories[i][t1]-trayectories[i][-1]) 
+        
         
     if erase_slow:
-        static_features = np.where(velocity < min_motion)[0]
+        static_features = np.where((velocity_x+velocity_y) < min_motion)[0]
         
     #We remove the static features
     if erase_slow:
         features = delete_row(features,static_features)
-        velocity = delete_row(velocity,static_features)
+        velocity_x = delete_row(velocity_x,static_features)
+        velocity_y = delete_row(velocity_y,static_features)
         trayectories = delete_row(trayectories,static_features)
 
-    return features, velocity, trayectories
+    return velocity_x, velocity_y, features , trayectories
 
 @jit(nopython = True)
 def calculateDirectionVar(trayectories, t2 = 1):
@@ -174,28 +178,7 @@ def auxCollectivenessAndConflict(clique,trayectories, k, t1):
 
     return collectiveness, conflict
 
-# Traceback (most recent call last):
-#   File "/home/diego/Universidad/TFG/Github/TFG/main.py", line 75, in <module>
-#     acc, auc, nu = try_UMN(1,params, verbose = False)
-#   File "/home/diego/Universidad/TFG/Github/TFG/main.py", line 22, in try_UMN
-#     extract_Descriptors_Dir(params, "Datasets/UMN/Escenas Completas/Escena "+str(escena)+"/", descriptors_dir,gt)
-#   File "/home/diego/Universidad/TFG/Github/TFG/files.py", line 24, in extract_Descriptors_Dir
-#     extract_descriptors(video,
-#   File "/home/diego/Universidad/TFG/Github/TFG/descriptors.py", line 329, in extract_descriptors
-#     collectiveness, conflict = calculateCollectivenessAndConflict(cliques,arr_trayectories, t1 = t1)
-#   File "/home/diego/Universidad/TFG/Github/TFG/descriptors.py", line 184, in calculateCollectivenessAndConflict
-#     collectiveness[k], conflict[k] = auxCollectivenessAndConflict(np.array(cliques[k]),trayectories, k, t1)
-#   File "/usr/lib/python3.9/site-packages/numba-0.53.0.dev0+731.g00ad12751-py3.9-linux-x86_64.egg/numba/core/dispatcher.py", line 420, in _compile_for_args
-#     error_rewrite(e, 'typing')
-#   File "/usr/lib/python3.9/site-packages/numba-0.53.0.dev0+731.g00ad12751-py3.9-linux-x86_64.egg/numba/core/dispatcher.py", line 361, in error_rewrite
-#     raise e.with_traceback(None)
-# numba.core.errors.TypingError: Failed in nopython mode pipeline (step: nopython frontend)
-# non-precise type array(pyobject, 1d, C)
-# During: typing of argument at /home/diego/Universidad/TFG/Github/TFG/descriptors.py (164)
 
-# File "descriptors.py", line 164:
-# def auxCollectivenessAndConflict(clique,trayectories, k, t1):
-#     collectiveness = 0
 def calculateCollectivenessAndConflict(cliques, trayectories,t1 = 0):
     # Initialization
     collectiveness = np.zeros(len(trayectories))
@@ -219,7 +202,7 @@ def auxDensity(clique, features, bandwidth, i):
 
 def calculateDensity(cliques,features, bandwidth = 0.5):
     # Bandwidth = Bandwidth of the 2D Gaussian Kernel
-    density = np.array([auxDensity(np.array(cliques[i]), features, bandwidth,i) for i in range(len(cliques))])
+    density = np.array([auxDensity(np.array(cliques[i]), features, bandwidth,i) for i in np.arange(len(cliques))])
     
     return density
 
@@ -326,7 +309,7 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
             #Metrics analysis
             if len(trayectories) > 0:
                 arr_trayectories = np.array(trayectories)
-                prev, velocity, arr_trayectories = calculateMovement(prev,arr_trayectories, min_motion*(-t1), t1 = t1, erase_slow = True)
+                velocity_x, velocity_y, prev, arr_trayectories = calculateMovement(prev,arr_trayectories, min_motion*(-t1), t1 = t1, erase_slow = True)
                 trayectories = arr_trayectories.tolist()
                 
 
@@ -363,21 +346,23 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
 
                 if model is not None:
                     frame = addPrediction(frame,model,
-                                      (velocity, dir_var, stability, collectiveness, conflict, density, uniformity), range_max)
+                                      (velocity_x, velocity_y, dir_var, stability, collectiveness, conflict, density, uniformity), range_max)
 
             else:
-                velocity = np.zeros(1)
-                dir_var = velocity.copy()
-                collectiveness = velocity.copy()
-                conflict = velocity.copy()
-                stability = velocity.copy()
-                density = velocity.copy()
-                uniformity = velocity.copy()
+                velocity_x = np.zeros(1)
+                velocity_y = np.zeros(1)
+                dir_var = np.zeros(1)
+                collectiveness = np.zeros(1)
+                conflict = np.zeros(1)
+                stability = np.zeros(1)
+                density = np.zeros(1)
+                uniformity = np.zeros(1)
                 
                                 
                 # Buscar una forma mejor
                 
-            file.write(str(velocity.tolist())+"\n")
+            file.write(str(velocity_x.tolist())+"\n")
+            file.write(str(velocity_y.tolist())+"\n")
             file.write(str(dir_var.tolist())+"\n")
             file.write(str(stability.tolist())+"\n")
             file.write(str(collectiveness.tolist())+"\n")
@@ -387,7 +372,6 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
 
             cv.imshow("Crowd", frame)            
         
-        #ret = a boolean return value from getting the frame, frame = the current frame being projected in the video
         video_open, frame = cap.read()
         
         if video_open:

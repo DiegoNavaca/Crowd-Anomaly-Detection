@@ -27,7 +27,7 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt):
             # We also store the labels in a .labels file
             beginning, end, length = gt[name]
             L = params["L"]
-            labels = [1 if i < (beginning+L) or i > (end+L) else -1 for i in range(length-L+1)]
+            labels = [1 if i < (beginning-L) or i > (end-L) else -1 for i in range(length-L+1)]
             
             labels_file = open(output_dir+name+".labels","w")
             labels_file.write(str(labels))
