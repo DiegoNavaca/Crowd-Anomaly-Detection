@@ -4,8 +4,10 @@ import glob
 from descriptors import extract_descriptors
 
 # Extracts the descriptors of all files in a directory and saves them in separate files
-def extract_Descriptors_Dir(params, input_dir, output_dir, gt):
-    for video in glob.glob(input_dir+"*"):
+def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = True):
+    for i, video in enumerate(glob.glob(input_dir+"**", recursive = True)):
+        if verbose:
+            print("{} - {}".format(i,video))
         try:
             # Check if file is a video 
             assert video.split("/")[-1][-4:] == ".avi" or video.split("/")[-1][-4:] == ".mp4"

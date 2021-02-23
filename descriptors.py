@@ -277,32 +277,43 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
     it = 0
 
     # Feature detection
-    prev_key = fast.detect(prev_frame,None)
-    prev_aux = cv.KeyPoint_convert(prev_key)
-    prev_aux = prev_aux.reshape(-1, 1, 2)
+    try:
+        prev_key = fast.detect(prev_frame,None)
+        prev_aux = cv.KeyPoint_convert(prev_key)
+        prev_aux = prev_aux.reshape(-1, 1, 2)
 
-    # Trayectories initialization
-    trayectories_aux = []
-    trayectories = []
-    for p in prev_aux:
-        a, b = p.ravel()
-        trayectories_aux.append([np.array((a,b,1))])
+        # Trayectories initialization
+        trayectories_aux = []
+        trayectories = []
+        for p in prev_aux:
+            a, b = p.ravel()
+            trayectories_aux.append([np.array((a,b,1))])
+            
+    except:
+        pass
     
     while(video_open):
         it += 1
         
         if(it % L == 0):
             # Feature detection
-            prev = prev_aux.copy()
-            prev_key = fast.detect(prev_frame,None)
-            prev_aux = cv.KeyPoint_convert(prev_key)
-            prev_aux = prev_aux.reshape(-1, 1, 2)
+            try:
+                prev = prev_aux.copy()
+                prev_key = fast.detect(prev_frame,None)
+                prev_aux = cv.KeyPoint_convert(prev_key)
+                prev_aux = prev_aux.reshape(-1, 1, 2)
+            
 
-            trayectories = trayectories_aux.copy()
-            trayectories_aux = []
-            for p in prev_aux:
-                a, b = p.ravel()
-                trayectories_aux.append([np.array((a,b,1))])
+                trayectories = trayectories_aux.copy()
+                trayectories_aux = []
+                for p in prev_aux:
+                    a, b = p.ravel()
+                    trayectories_aux.append([np.array((a,b,1))])
+
+            except:
+                trayectories = []
+                trayectories_aux = []
+                prev = []
         
         # We calculate the metrics and begin a new set of trayectories every L frames
         if(it >= L):
@@ -340,7 +351,7 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
 
                 # Image representation for visualizing results
                 #addTrayectoriesToImage(trayectories,frame)
-                #addDelaunayToImage(delaunay,frame)
+                addDelaunayToImage(delaunay,frame)
                 #addCliqueToImage(cliques, -1, frame,trayectories)
                 #addClustersToImage(clusters,prev,frame)
 
@@ -380,51 +391,58 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
             if (it > L) :
                 if len(prev) > 0:
                     nex, status, _ = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev, None)
-                    _, status, _ = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex, prev)
                     
+                    if status is not None:
+                        _, status, _ = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex, prev)
+                    
+                    if status is not None:
+                        # Selects good feature points for previous position
+                        for i in np.arange(len(status)-1, -1, -1):
+                            if status[i] == 0:
+                                del trayectories[i]
+                
+                        # Selects good feature points for nex position
+                        good_new = nex[status == 1]
+        
+                        for i, (new) in enumerate(good_new):
+                            # Adds the new coordinates to the graph and the trayectories
+                            a, b = new.ravel()
+                            trayectories[i].append(np.array((a,b,1)))
+                            del trayectories[i][0]
+    
+                        # Updates previous good feature points
+                        prev = good_new.reshape(-1, 1, 2)
+
+            try:
+                nex_aux, status_aux, _ = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev_aux, None)
+                
+                if status_aux is not None:
+                    _, status_aux, _ = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex_aux, prev_aux)
+
+                if status_aux is not None:
         
                     # Selects good feature points for previous position
-                    for i in np.arange(len(status)-1, -1, -1):
-                        if status[i] == 0:
-                            del trayectories[i]
+                    for i in np.arange(len(status_aux)-1, -1, -1):
+                        if status_aux[i] == 0:
+                            del trayectories_aux[i]
                 
                     # Selects good feature points for nex position
-                    good_new = nex[status == 1]
+                    good_new = nex_aux[status_aux == 1]
         
                     for i, (new) in enumerate(good_new):
                         # Adds the new coordinates to the graph and the trayectories
                         a, b = new.ravel()
-                        trayectories[i].append(np.array((a,b,1)))
-                        del trayectories[i][0]
-    
+                        trayectories_aux[i].append(np.array((a,b,1)))
+                        if( len(trayectories_aux[i]) > L ):
+                            del trayectories_aux[i][0]
+        
                     # Updates previous good feature points
-                    prev = good_new.reshape(-1, 1, 2)
+                    prev_aux = good_new.reshape(-1, 1, 2)
 
-            nex_aux, status_aux, _ = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev_aux, None)
-            _, status_aux, _ = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex_aux, prev_aux)
-
-            if status_aux is not None:
-        
-                # Selects good feature points for previous position
-                for i in np.arange(len(status_aux)-1, -1, -1):
-                    if status_aux[i] == 0:
-                        del trayectories_aux[i]
-                
-                # Selects good feature points for nex position
-                good_new = nex_aux[status_aux == 1]
-        
-                for i, (new) in enumerate(good_new):
-                    # Adds the new coordinates to the graph and the trayectories
-                    a, b = new.ravel()
-                    trayectories_aux[i].append(np.array((a,b,1)))
-                    if( len(trayectories_aux[i]) > L ):
-                        del trayectories_aux[i][0]
-        
-                # Updates previous good feature points
-                prev_aux = good_new.reshape(-1, 1, 2)
-
-                # Updates previous frame
-                prev_frame = frame.copy()
+                    # Updates previous frame
+                    prev_frame = frame.copy()
+            except:
+                pass
     
     # Frames are read by intervals of 1 milliseconds. The function ends after the user presses the 'q' key
         if cv.waitKey(1) & 0xFF == ord('q'):

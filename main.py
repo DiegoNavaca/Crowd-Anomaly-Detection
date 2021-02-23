@@ -11,16 +11,16 @@ from SVM import train_SVC
 from SVM import test_SVM
 from SVM import prepare_Hist_and_Labels
 
-def try_UMN(escena, params, tam_test, verbose = True):
+def try_Dataset(dataset, descriptors_dir, video_dir, params, tam_test, verbose = True):
+    
+    gt = get_Ground_Truth("Datasets/"+dataset+"/ground_truth.txt")
 
-    descriptors_dir = "Descriptors/UMN/Escena "+str(escena)+"/"
-    
-    gt = get_Ground_Truth("Datasets/UMN/ground_truth.txt")
-    
-    extract_Descriptors_Dir(params, "Datasets/UMN/Escenas Completas/Escena "+str(escena)+"/", descriptors_dir,gt)
+    start = time.time()
+    extract_Descriptors_Dir(params, video_dir, descriptors_dir,gt, verbose)
+    if verbose:
+        print(time.time()-start)
 
     names = [name[:-5] for name in glob.glob(descriptors_dir+"*.data")]
-
 
     best_acc = 0
     best_auc = 0
@@ -29,7 +29,7 @@ def try_UMN(escena, params, tam_test, verbose = True):
         average_acc = 0
         average_auc = 0
         for i in range(len(names)):
-            test = names[i*tam_test:]+names[:i*tam_test+tam_test]
+            test = names[i*tam_test:i*tam_test+tam_test]
             training = names[:i*tam_test]+names[i*tam_test+tam_test:]
             
             range_max = get_Max_Descriptors(training)
@@ -50,7 +50,7 @@ def try_UMN(escena, params, tam_test, verbose = True):
                 print("Acertados: ",sum(1 for i in range(len(prediction)) if prediction[i] == labels[i]),"-",len(prediction))
                 print("Positivos: {} - {}".format(
                     sum(1 for i in range(len(prediction)) if prediction[i] == labels[i] and prediction[i] == -1), labels.count(-1)))
-                print([(i+params["L"]-1, labels[i]) for i in range(len(prediction)) if prediction[i] != labels[i]])
+                #print([(i+params["L"]-1, labels[i]) for i in range(len(prediction)) if prediction[i] != labels[i]])
                 print("Accuracy: {:1.3f}".format(acc))
                 print("AUC: {:1.3f}\n".format(auc))
 
@@ -71,27 +71,42 @@ def try_UMN(escena, params, tam_test, verbose = True):
             best_nu = nu
 
     return best_acc, best_auc, best_nu
-        
 
-for L in (5,10,15,20):
-    for t1 in (-3,-5):
-        for t2 in (1,2,4):
-            for min_motion in (0.01,0.025, 0.05):
-                params = {"L":L, "t1":t1, "t2":t2, "min_motion":min_motion, "fast_threshold":20}
-                print(params)
-                acc, auc, nu = try_UMN(3, params, 1, verbose = False)
+def try_UMN(escena, params, verbose = True):
+    descriptors_dir = "Descriptors/UMN/Escena "+str(escena)+"/"
+    video_dir = "Datasets/UMN/Escenas Completas/Escena "+str(escena)+"/"
 
-                print("nu: {}".format(nu))
-                print("Accuracy: {:1.3f}".format(acc))
-                print("AUC: {:1.3f}".format(auc))
+    acc, auc, nu = try_Dataset("UMN", descriptors_dir, video_dir, params, 1, verbose)
 
-# params = {"L":10, "t1":-5, "t2":1, "min_motion":0.025, "fast_threshold":20}
-# print(params)
-# acc, auc, nu = try_UMN(2,params, verbose = True)
+    return acc, auc, nu
 
-# print("nu: {}".format(nu))
-# print("Accuracy: {:1.3f}".format(acc))
-# print("AUC: {:1.3f}".format(auc))
+def try_CVD(params, verbose = True):
+    descriptors_dir = "Descriptors/CVD/"
+    video_dir = "Datasets/Crowd Violence Detection/"
+
+    acc, auc, nu = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir, params, 49, verbose)
+
+    return acc, auc, nu
+
+# for L in (5,10,15,20):
+#     for t1 in (-3,-5):
+#         for t2 in (1,2,4):
+#             for min_motion in (0.01,0.025, 0.05):
+#                 params = {"L":L, "t1":t1, "t2":t2, "min_motion":min_motion, "fast_threshold":20}
+#                 print(params)
+#                 acc, auc, nu = try_UMN(3, params, verbose = False)
+
+#                 print("nu: {}".format(nu))
+#                 print("Accuracy: {:1.3f}".format(acc))
+#                 print("AUC: {:1.3f}".format(auc))
+
+params = {"L":15, "t1":-5, "t2":1, "min_motion":0.025, "fast_threshold":20}
+print(params)
+acc, auc, nu = try_UMN(1, params, verbose = True)
+
+print("nu: {}".format(nu))
+print("Accuracy: {:1.3f}".format(acc))
+print("AUC: {:1.3f}".format(auc))
 
 # Escena 1
 # {'L': 15, 't1': -5, 't2': 1, 'min_motion': 0.025, 'fast_threshold': 20}
