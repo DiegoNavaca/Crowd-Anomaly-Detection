@@ -1,6 +1,6 @@
 from utils import imgContains
-from utils import np
-from utils import cv
+import numpy as np
+import cv2 as cv
 
 ########### IMAGE VISUALIZATION ###########
 

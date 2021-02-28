@@ -1,6 +1,3 @@
-import numpy as np
-import cv2 as cv
-
 import numba
 from numba import jit
 

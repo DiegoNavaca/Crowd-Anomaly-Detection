@@ -1,11 +1,12 @@
+import pickle
+import numba
+import numpy as np
+import cv2 as cv
 from sklearn.cluster import DBSCAN
 from collections import namedtuple
-import numba
 from numba import jit
 from itertools import combinations
 
-from utils import np
-from utils import cv
 from utils import imgContains
 from visualization import addPrediction
 from visualization import addDelaunayToImage
@@ -48,6 +49,7 @@ def crossRatioTriangle(pt2,pt0,pt1):
     dst01 = np.linalg.norm(pt0-pt1)
     dst002 = np.linalg.norm(pt0-mid02)
     dst012 = np.linalg.norm(pt0-mid12)
+
     if (dst01 != 0 and dst002 != 0 and dst012 != 0):
         cos02 = dot02 / (dst01 * dst002)
         cos12 = dot12 / (dst01 * dst012)
@@ -58,6 +60,7 @@ def crossRatioTriangle(pt2,pt0,pt1):
 
         # Cross ratio calculation
         cr = dst_pr12*(dst01 - dst_pr02) / dst01*(dst_pr12-dst_pr02)
+        
     else:
         cr = 0    
 
@@ -114,7 +117,7 @@ def delete_row(arr, num):
 @jit(nopython = True)
 def calculateMovement(features, trayectories, min_motion = 1.0, erase_slow = False, t1 = -6):
     velocity_x = np.zeros(len(trayectories),dtype = numba.float64)
-    velocity_y = velocity_x.copy()
+    velocity_y = np.zeros(len(trayectories),dtype = numba.float64)
     #velocity = velocity_x.copy()
     for i in range(len(trayectories)):
         velocity_x[i] = abs(trayectories[i][t1][0]-trayectories[i][-1][0])
@@ -186,7 +189,10 @@ def calculateCollectivenessAndConflict(cliques, trayectories,t1 = 0):
     # For every feature point
     for k in range(len(cliques)):
         # We measure collectiveness and conflict
-        collectiveness[k], conflict[k] = auxCollectivenessAndConflict(np.array(cliques[k]),trayectories, k, t1)
+        try:
+            collectiveness[k], conflict[k] = auxCollectivenessAndConflict(np.array(cliques[k]),trayectories, k, t1)
+        except:
+            print(k, cliques[k], type(cliques))
 
     return collectiveness, conflict
 
@@ -203,7 +209,7 @@ def auxDensity(clique, features, bandwidth, i):
 def calculateDensity(cliques,features, bandwidth = 0.5):
     # Bandwidth = Bandwidth of the 2D Gaussian Kernel
     density = np.array([auxDensity(np.array(cliques[i]), features, bandwidth,i) for i in np.arange(len(cliques))])
-    
+        
     return density
 
 @jit(nopython = True)
@@ -245,10 +251,10 @@ def calculateUniformity(cliques, clusters, features):
         intra_cluster = intra_cluster + intra
         inter_cluster = inter_cluster + inter
 
-    if(total_sum == 0):
-        uniformity = np.full(max(max(clusters)+1,1),-1)
-    else:
+    try:
         uniformity = (intra_cluster / total_sum) - (inter_cluster / total_sum)**2
+    except ZeroDivisionError:
+        uniformity = np.full(max(max(clusters)+1,1),-1)
 
     # We return an array to keep consistency with the rest of the descriptors
     return np.array([uniformity[clusters[i]] for i in np.arange(len(clusters))])
@@ -257,11 +263,13 @@ def calculateUniformity(cliques, clusters, features):
 ############# MAIN FUNCTION #############
 
 # Function to extract the descriptors of a video
-def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, out_file = "descriptors", model = None, range_max = None, min_puntos = 5):
+def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, out_file = "descriptors", model = None, range_max = None, min_puntos = 10):
     
     #FAST algorithm for feature detection
     fast = cv.FastFeatureDetector_create()
     fast.setThreshold(fast_threshold)
+
+    sift = cv.SIFT_create(nfeatures = 1000)
     
     # The video feed is read in as a VideoCapture object
     cap = cv.VideoCapture(video_file)
@@ -278,7 +286,7 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
 
     # Feature detection
     try:
-        prev_key = fast.detect(prev_frame,None)
+        prev_key = sift.detect(prev_frame,None)
         prev_aux = cv.KeyPoint_convert(prev_key)
         prev_aux = prev_aux.reshape(-1, 1, 2)
 
@@ -287,7 +295,7 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
         trayectories = []
         for p in prev_aux:
             a, b = p.ravel()
-            trayectories_aux.append([np.array((a,b,1))])
+            trayectories_aux.append([np.array((a,b))])
             
     except:
         pass
@@ -299,16 +307,15 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
             # Feature detection
             try:
                 prev = prev_aux.copy()
-                prev_key = fast.detect(prev_frame,None)
+                prev_key = sift.detect(prev_frame,None)
                 prev_aux = cv.KeyPoint_convert(prev_key)
-                prev_aux = prev_aux.reshape(-1, 1, 2)
-            
+                prev_aux = prev_aux.reshape(-1, 1, 2)            
 
                 trayectories = trayectories_aux.copy()
                 trayectories_aux = []
                 for p in prev_aux:
                     a, b = p.ravel()
-                    trayectories_aux.append([np.array((a,b,1))])
+                    trayectories_aux.append([np.array((a,b))])
 
             except:
                 trayectories = []
@@ -371,7 +378,7 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
                 
                                 
                 # Buscar una forma mejor
-                
+            
             file.write(str(velocity_x.tolist())+"\n")
             file.write(str(velocity_y.tolist())+"\n")
             file.write(str(dir_var.tolist())+"\n")
@@ -379,7 +386,8 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
             file.write(str(collectiveness.tolist())+"\n")
             file.write(str(conflict.tolist())+"\n")
             file.write(str(density.tolist())+"\n")
-            file.write(str(uniformity.tolist())+"\n")                
+            file.write(str(uniformity.tolist())+"\n")              
+            
 
             cv.imshow("Crowd", frame)            
         
@@ -388,59 +396,56 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
         if video_open:
             # Calculates sparse optical flow by Lucas-Kanade method
             # https://docs.opencv.org/3.0-beta/modules/video/doc/motion_analysis_and_object_tracking.html#calcopticalflowpyrlk
-            if (it > L) :
-                if len(prev) > 0:
+        
+            if (it > L):
+                try:
                     nex, status, _ = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev, None)
+                    _, status, _ = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex, prev)
                     
-                    if status is not None:
-                        _, status, _ = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex, prev)
-                    
-                    if status is not None:
-                        # Selects good feature points for previous position
-                        for i in np.arange(len(status)-1, -1, -1):
-                            if status[i] == 0:
-                                del trayectories[i]
-                
-                        # Selects good feature points for nex position
-                        good_new = nex[status == 1]
-        
-                        for i, (new) in enumerate(good_new):
-                            # Adds the new coordinates to the graph and the trayectories
-                            a, b = new.ravel()
-                            trayectories[i].append(np.array((a,b,1)))
-                            del trayectories[i][0]
-    
-                        # Updates previous good feature points
-                        prev = good_new.reshape(-1, 1, 2)
-
-            try:
-                nex_aux, status_aux, _ = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev_aux, None)
-                
-                if status_aux is not None:
-                    _, status_aux, _ = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex_aux, prev_aux)
-
-                if status_aux is not None:
-        
                     # Selects good feature points for previous position
-                    for i in np.arange(len(status_aux)-1, -1, -1):
-                        if status_aux[i] == 0:
-                            del trayectories_aux[i]
+                    for i in np.arange(len(status)-1, -1, -1):
+                        if status[i] == 0:
+                            del trayectories[i]
                 
                     # Selects good feature points for nex position
-                    good_new = nex_aux[status_aux == 1]
+                    good_new = nex[status == 1]
         
                     for i, (new) in enumerate(good_new):
                         # Adds the new coordinates to the graph and the trayectories
                         a, b = new.ravel()
-                        trayectories_aux[i].append(np.array((a,b,1)))
-                        if( len(trayectories_aux[i]) > L ):
-                            del trayectories_aux[i][0]
-        
+                        trayectories[i].append(np.array((a,b)))
+                        del trayectories[i][0]
+    
                     # Updates previous good feature points
-                    prev_aux = good_new.reshape(-1, 1, 2)
+                    prev = good_new.reshape(-1, 1, 2)
 
-                    # Updates previous frame
-                    prev_frame = frame.copy()
+                except:
+                    pass
+
+            try:
+                nex_aux, status_aux, _ = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev_aux, None)
+                _, status_aux, _ = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex_aux, prev_aux)
+        
+                # Selects good feature points for previous position
+                for i in np.arange(len(status_aux)-1, -1, -1):
+                    if status_aux[i] == 0:
+                        del trayectories_aux[i]
+                
+                # Selects good feature points for nex position
+                good_new = nex_aux[status_aux == 1]
+        
+                for i, (new) in enumerate(good_new):
+                    # Adds the new coordinates to the graph and the trayectories
+                    a, b = new.ravel()
+                    trayectories_aux[i].append(np.array((a,b)))
+                    if( len(trayectories_aux[i]) > L ):
+                        del trayectories_aux[i][0]
+        
+                # Updates previous good feature points
+                prev_aux = good_new.reshape(-1, 1, 2)
+
+                # Updates previous frame
+                prev_frame = frame.copy()
             except:
                 pass
     
