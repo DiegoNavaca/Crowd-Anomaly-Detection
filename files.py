@@ -1,6 +1,9 @@
 import os
 import glob
 import time
+import pickle
+
+import numpy as np
 
 from descriptors import extract_descriptors
 
@@ -21,11 +24,11 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = True, v
             name = video.split("/")[-1][:-4]
 
             data_file = output_dir+name+".data"
-            if os.path.exists(data_file):
-                os.remove(data_file)
+            # if os.path.exists(data_file):
+            #    os.remove(data_file)
             
-            extract_descriptors(video,
-                            params["L"], params["t1"], params["t2"], params["min_motion"], params["fast_threshold"], data_file)
+            # extract_descriptors(video, params["L"], params["t1"], params["t2"], params["min_motion"],
+            #                     params["fast_threshold"], params["max_num_features"], data_file)
 
             # We also store the labels in a .labels file
             if video_classification:
@@ -35,8 +38,8 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = True, v
                 L = params["L"]
                 labels = [1 if i < (beginning-L) or i > (end-L) else -1 for i in range(length-L+1)]
             
-            labels_file = open(output_dir+name+".labels","w")
-            labels_file.write(str(labels))
+            labels_file = open(output_dir+name+".labels","wb")
+            pickle.dump(labels,labels_file)
             labels_file.close()
 
         except AssertionError:
@@ -45,7 +48,7 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = True, v
         
 # Reads the ground truth from a file
 def get_Ground_Truth(in_file):
-    f = open(in_file)
+    f = open(in_file,"r")
     gt = {}
     for line in f:
         lista = line.split(",")
@@ -61,10 +64,8 @@ def get_Ground_Truth(in_file):
 
 # Reads the labels from a file (list format)
 def read_Labels(labels_file):
-    f = open(labels_file)
-    s = f.read()
+    f = open(labels_file,"rb")
+    labels = pickle.load(f)
     f.close()
-
-    labels =  tuple(map(int, s[1:-1].split(", ")))
 
     return labels

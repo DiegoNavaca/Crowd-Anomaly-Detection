@@ -263,13 +263,13 @@ def calculateUniformity(cliques, clusters, features):
 ############# MAIN FUNCTION #############
 
 # Function to extract the descriptors of a video
-def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, out_file = "descriptors", model = None, range_max = None, min_puntos = 10):
+def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, max_num_features, out_file = "descriptors", model = None, range_max = None, min_puntos = 10):
     
     #FAST algorithm for feature detection
     fast = cv.FastFeatureDetector_create()
     fast.setThreshold(fast_threshold)
 
-    sift = cv.SIFT_create(nfeatures = 1000)
+    sift = cv.SIFT_create(nfeatures = max_num_features)
     
     # The video feed is read in as a VideoCapture object
     cap = cv.VideoCapture(video_file)
@@ -277,10 +277,12 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
     # ret = a boolean return value from getting the frame, first_frame = the first frame in the entire video sequence
     video_open, prev_frame = cap.read()
 
+    height, width = prev_frame.shape[:2]
+
     # Delaunay Subdivision Function
     delaunay = cv.Subdiv2D()
 
-    file = open(out_file,"a")
+    data_file = open(out_file,"ab")
 
     it = 0
 
@@ -327,7 +329,8 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
             #Metrics analysis
             if len(trayectories) > 0:
                 arr_trayectories = np.array(trayectories)
-                velocity_x, velocity_y, prev, arr_trayectories = calculateMovement(prev,arr_trayectories, min_motion*(-t1), t1 = t1, erase_slow = True)
+                velocity_x, velocity_y, prev, arr_trayectories = calculateMovement(prev,arr_trayectories,
+                                                                                   (height+width)*min_motion*(-t1), t1 = t1, erase_slow = True)
                 trayectories = arr_trayectories.tolist()
                 
 
@@ -358,7 +361,7 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
 
                 # Image representation for visualizing results
                 #addTrayectoriesToImage(trayectories,frame)
-                addDelaunayToImage(delaunay,frame)
+                #addDelaunayToImage(delaunay,frame)
                 #addCliqueToImage(cliques, -1, frame,trayectories)
                 #addClustersToImage(clusters,prev,frame)
 
@@ -375,19 +378,10 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
                 stability = np.zeros(1)
                 density = np.zeros(1)
                 uniformity = np.zeros(1)
-                
-                                
-                # Buscar una forma mejor
-            
-            file.write(str(velocity_x.tolist())+"\n")
-            file.write(str(velocity_y.tolist())+"\n")
-            file.write(str(dir_var.tolist())+"\n")
-            file.write(str(stability.tolist())+"\n")
-            file.write(str(collectiveness.tolist())+"\n")
-            file.write(str(conflict.tolist())+"\n")
-            file.write(str(density.tolist())+"\n")
-            file.write(str(uniformity.tolist())+"\n")              
-            
+
+            # We save the data into a file
+            descriptores = [velocity_x, velocity_y, dir_var, stability, collectiveness, conflict, density, uniformity]
+            pickle.dump(descriptores, data_file)        
 
             cv.imshow("Crowd", frame)            
         
@@ -456,5 +450,5 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
     # The following frees up resources and closes all windows
     cap.release()
     cv.destroyAllWindows()
-    file.close()
+    data_file.close()
 

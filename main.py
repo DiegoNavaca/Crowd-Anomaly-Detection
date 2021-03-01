@@ -40,7 +40,7 @@ def try_Dataset(dataset, descriptors_dir, video_dir, params, tam_test, verbose =
             range_max = get_Max_Descriptors(training, video_classification)
             print(range_max)
 
-            hist, labels = prepare_Hist_and_Labels(training, range_max, video_classification)
+            hist, labels = prepare_Hist_and_Labels(training, range_max, video_classification, eliminar_vacios = True)
             print(len(hist), len(labels))
 
             model = train_SVC(hist, labels, nu = nu)
@@ -48,7 +48,7 @@ def try_Dataset(dataset, descriptors_dir, video_dir, params, tam_test, verbose =
             hist, labels = prepare_Hist_and_Labels(test, range_max, video_classification)
             print(len(hist), len(labels))
 
-            prediction = test_SVM(hist, range_max, model)
+            prediction = test_SVM(hist, range_max, model, video_classification)
 
             acc = accuracy_score(labels,prediction)
             try:
@@ -121,10 +121,10 @@ def try_CUHK(params, verbose = True):
 #                 print("Accuracy: {:1.3f}".format(acc))
 #                 print("AUC: {:1.3f}".format(auc))
 
-params = {"L":10, "t1":-5, "t2":1, "min_motion":0.05, "fast_threshold":20}
+params = {"L":5, "t1":-4, "t2":1, "min_motion":0.025 / (320+212), "fast_threshold":20, "max_num_features":2000}
 print(params)
-acc, auc, nu = try_UMN(1,params, verbose = True)
-#acc, auc, nu = try_CVD( params, verbose = True)
+#acc, auc, nu = try_UMN(1,params, verbose = True)
+acc, auc, nu = try_CVD( params, verbose = True)
 #acc, auc, nu = try_CUHK( params, verbose = True)
 
 print("nu: {}".format(nu))
@@ -148,3 +148,7 @@ print("AUC: {:1.3f}".format(auc))
 # nu: 0.01
 # Accuracy: 0.983
 # AUC: 0.973
+
+# CVD
+# {'L': 5, 't1': -4, 't2': 1, 'min_motion': 4.699248120300752e-05, 'fast_threshold': 20, 'max_num_features': 1000}
+# AUC: 0.8
