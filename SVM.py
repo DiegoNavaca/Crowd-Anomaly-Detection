@@ -24,7 +24,7 @@ def get_Max_Descriptors(files, video_classification, n_descriptors = 8):
                 else:
                     label = labels[k]
 
-                if label == 1:
+                if label != -1:
                     for i, d in enumerate(descriptores):
                         aux = max(d)
                     
@@ -105,6 +105,19 @@ def prepare_Hist_and_Labels(files, range_max, video_classification, eliminar_vac
 
     return hist, labels
 
+def train_and_Test_SVC(training, test, C, video_classification):
+    range_max = get_Max_Descriptors(training, video_classification)
+
+    hist, labels = prepare_Hist_and_Labels(training, range_max, video_classification, eliminar_vacios = True)
+            
+    model = train_SVC(hist, labels, C = C)
+            
+    hist, labels = prepare_Hist_and_Labels(test, range_max, video_classification)
+        
+    prediction = test_SVM(hist, range_max, model, video_classification)
+
+    return prediction, labels
+
 def train_OC_SVM(samples, out_file = None, nu = 0.1):
     svm = OneClassSVM(nu = nu, verbose = False, kernel = "sigmoid").fit(samples)
     if out_file is not None:
@@ -112,14 +125,9 @@ def train_OC_SVM(samples, out_file = None, nu = 0.1):
 
     return svm
 
-def train_SVC(samples, labels, out_file = None, nu = 0.1):
-    svm = NuSVC(nu = nu, kernel = 'rbf')
-    try:
-        svm.fit(samples, labels)
-    except:
-        print("Nu infeasible, using SVC instead")
-        svm = SVC(C = 1/nu, kernel = "rbf")
-        svm.fit(samples, labels)
+def train_SVC(samples, labels, out_file = None, C = 10):
+    svm = SVC(C = C, kernel = "rbf", decision_function_shape = 'ovo', class_weight = 'balanced')
+    svm.fit(samples, labels)
     if out_file is not None:
         joblib.dump(svm, out_file)
 
@@ -129,6 +137,6 @@ def test_SVM(samples, range_max, model, video_classification):
     prediction = model.predict(samples)
 
     if not video_classification:    
-        prediction = [1 if samples[i].any() else prediction[i] for i in range(len(prediction))]
+        prediction = [1 if not samples[i].any() else prediction[i] for i in range(len(prediction))]
 
     return prediction

@@ -4,14 +4,17 @@ import time
 import pickle
 
 import numpy as np
+import cv2 as cv
 
 from descriptors import extract_descriptors
 
 # Extracts the descriptors of all files in a directory and saves them in separate files
-def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = True, video_classification = False):
+def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = True, video_classification = False, skip_extraction = False):
     # The descriptors are stored in a .data file in the output directory
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+
+    start = time.time()
     
     for i, video in enumerate(glob.glob(input_dir+"**", recursive = True)):
         if verbose:
@@ -24,11 +27,19 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = True, v
             name = video.split("/")[-1][:-4]
 
             data_file = output_dir+name+".data"
-            # if os.path.exists(data_file):
-            #    os.remove(data_file)
-            
-            # extract_descriptors(video, params["L"], params["t1"], params["t2"], params["min_motion"],
-            #                     params["fast_threshold"], params["max_num_features"], data_file)
+            if not skip_extraction:
+                if os.path.exists(data_file):
+                    os.remove(data_file)
+
+                if "skip_to_middle" in params["others"]:
+                    cap = cv.VideoCapture(video)
+                    params["others"]["skip_frames"] = int(cap.get(cv.CAP_PROP_FRAME_COUNT)) // 2 - params["L"]
+
+                video_start = time.time()
+                extract_descriptors(video, params["L"], params["t1"], params["t2"], params["min_motion"],
+                                    params["fast_threshold"], params["max_num_features"], data_file,
+                                    use_sift = params["use_sift"], others = params["others"])
+                print("Tiempo extraccion: {:1.3f}".format(time.time()-start))
 
             # We also store the labels in a .labels file
             if video_classification:
@@ -44,6 +55,9 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = True, v
 
         except AssertionError:
             print("{} is not a video".format(video))
+
+    if verbose:
+        print("Tiempo de extraccion total: {:1.3f}".format(time.time()-start))
         
         
 # Reads the ground truth from a file
@@ -61,6 +75,21 @@ def get_Ground_Truth(in_file):
     f.close()
         
     return gt
+
+def get_Classes(in_file):
+    f = open(in_file,"r")
+    classes = {}
+    for line in f:
+        lista = line.split(",")
+        
+        if int(lista[1]) not in classes:
+            classes[int(lista[1])] = []
+
+        classes[int(lista[1])].append(lista[0])
+        
+    f.close()
+
+    return classes
 
 # Reads the labels from a file (list format)
 def read_Labels(labels_file):

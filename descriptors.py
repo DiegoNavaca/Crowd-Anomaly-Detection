@@ -2,6 +2,7 @@ import pickle
 import numba
 import numpy as np
 import cv2 as cv
+import time
 from sklearn.cluster import DBSCAN
 from collections import namedtuple
 from numba import jit
@@ -10,6 +11,7 @@ from itertools import combinations
 from utils import imgContains
 from visualization import addPrediction
 from visualization import addDelaunayToImage
+from visualization import addClustersToImage
 
 ############# AUXILIARY FUNCTIONS #############
 
@@ -24,6 +26,25 @@ def difAng(v0,v1):
     if dif >= np.pi:
         dif = 2*np.pi-dif
     return dif
+
+@jit(nopython = True)
+def delete_row(arr, num):
+    mask = np.zeros(arr.shape[0], dtype=np.int64) == 0
+    mask[num] = False
+    return arr[mask]
+
+def filter_fast_features(v_x, v_y, features, trayectories, limite):
+    velocity = v_x+v_y
+    
+    indices = np.argsort(velocity)
+    indices = indices[:-limite]
+    
+    features = delete_row(features,indices)
+    v_x = delete_row(v_x,indices)
+    v_y = delete_row(v_y,indices)
+    trayectories = delete_row(trayectories,indices)
+
+    return v_x, v_y, features , trayectories
 
 # Calculates the area of a triangle (x2 for a better efficiency)
 @jit(nopython = True)
@@ -109,22 +130,14 @@ def getClusters(features, mini = 2, e = 10):
 ############# METRICS #############
 
 @jit(nopython = True)
-def delete_row(arr, num):
-    mask = np.zeros(arr.shape[0], dtype=np.int64) == 0
-    mask[num] = False
-    return arr[mask]
-
-@jit(nopython = True)
-def calculateMovement(features, trayectories, min_motion = 1.0, erase_slow = False, t1 = -6):
+def calculateMovement(features, trayectories, min_motion, erase_slow = False, t1 = -6):
     velocity_x = np.zeros(len(trayectories),dtype = numba.float64)
     velocity_y = np.zeros(len(trayectories),dtype = numba.float64)
     #velocity = velocity_x.copy()
-    for i in range(len(trayectories)):
+    for i in np.arange(len(trayectories)):
         velocity_x[i] = abs(trayectories[i][t1][0]-trayectories[i][-1][0])
         velocity_y[i] = abs(trayectories[i][t1][1]-trayectories[i][-1][1])
-
         #velocity[i] = np.linalg.norm(trayectories[i][t1]-trayectories[i][-1]) 
-        
         
     if erase_slow:
         static_features = np.where((velocity_x+velocity_y) < min_motion)[0]
@@ -136,7 +149,7 @@ def calculateMovement(features, trayectories, min_motion = 1.0, erase_slow = Fal
         velocity_y = delete_row(velocity_y,static_features)
         trayectories = delete_row(trayectories,static_features)
 
-    return velocity_x, velocity_y, features , trayectories
+    return velocity_x, velocity_y , features , trayectories
 
 @jit(nopython = True)
 def calculateDirectionVar(trayectories, t2 = 1):
@@ -145,7 +158,7 @@ def calculateDirectionVar(trayectories, t2 = 1):
     ini = 2*t2 + (len(trayectories[0])-1) % t2
     lim = (len(trayectories[0]))
 
-    for k in range(len(trayectories)):
+    for k in np.arange(len(trayectories)):
         for i in range(ini,lim,t2):
             direction_variation[k] += difAng((trayectories[k][i],trayectories[k][i-1]),
                                              (trayectories[k][i-1],trayectories[k][i-2]))
@@ -171,7 +184,7 @@ def auxCollectivenessAndConflict(clique,trayectories, k, t1):
     collectiveness = 0
     conflict = 0
     k = int(k)
-    for i in range(len(clique)):
+    for i in np.arange(len(clique)):
         elem = int(clique[i])
         dif = difAng((trayectories[k][t1],trayectories[k][-1]),(trayectories[elem][t1],trayectories[elem][-1]))
         collectiveness += dif
@@ -185,21 +198,18 @@ def auxCollectivenessAndConflict(clique,trayectories, k, t1):
 def calculateCollectivenessAndConflict(cliques, trayectories,t1 = 0):
     # Initialization
     collectiveness = np.zeros(len(trayectories))
-    conflict = collectiveness.copy()
+    conflict = np.zeros(len(trayectories))
     # For every feature point
-    for k in range(len(cliques)):
+    for k in np.arange(len(cliques)):
         # We measure collectiveness and conflict
-        try:
-            collectiveness[k], conflict[k] = auxCollectivenessAndConflict(np.array(cliques[k]),trayectories, k, t1)
-        except:
-            print(k, cliques[k], type(cliques))
+        collectiveness[k], conflict[k] = auxCollectivenessAndConflict(np.array(cliques[k]),trayectories, k, t1)
 
     return collectiveness, conflict
 
 @jit(nopython = True)
 def auxDensity(clique, features, bandwidth, i):
     density = 0
-    for j in range(len(clique)):
+    for j in np.arange(len(clique)):
         elem = int(clique[j])
         density += np.exp(-1 * ( np.linalg.norm(features[i][0] - features[elem][0]) ) / 2*bandwidth**2)
     density /= np.sqrt(2*np.pi)*bandwidth
@@ -213,11 +223,10 @@ def calculateDensity(cliques,features, bandwidth = 0.5):
     return density
 
 @jit(nopython = True)
-def auxUniformity(clique, features, f, clusters):
-    dist_matrix = np.zeros((len(features),len(features)),dtype = numba.float64)
+def auxUniformity(clique, features, f, clusters, dist_matrix):
 
     inter_cluster = np.zeros(max(max(clusters)+1,1))
-    intra_cluster = inter_cluster.copy()
+    intra_cluster = np.zeros(len(inter_cluster))
     total_sum = 0
 
     for i in np.arange(len(clique)):
@@ -234,27 +243,32 @@ def auxUniformity(clique, features, f, clusters):
                 inter_cluster[clusters[f]] += 1 / dist_matrix[f][elem]
             total_sum += 1 / dist_matrix[f][elem]
 
-    return total_sum, intra_cluster, inter_cluster
+    return total_sum, intra_cluster, inter_cluster, dist_matrix
 
 def calculateUniformity(cliques, clusters, features):
-    #Initialization 
+    #Initialization
     uniformity = np.zeros(max(max(clusters)+1,1))
     inter_cluster = np.zeros(len(uniformity))
     intra_cluster = inter_cluster.copy()
     total_sum = 0
-    
+
+    dist_matrix = np.zeros((len(features),len(features)),dtype = float)
 
     # For every pair of point in each clique
+   
     for f in np.arange(len(features)):
-        total, intra, inter = auxUniformity(np.array(cliques[f]), features, f, clusters)
+        
+        total, intra, inter, dist_matrix = auxUniformity(np.array(cliques[f]), features, f, clusters, dist_matrix)
         total_sum += total
         intra_cluster = intra_cluster + intra
         inter_cluster = inter_cluster + inter
+         
 
     try:
         uniformity = (intra_cluster / total_sum) - (inter_cluster / total_sum)**2
     except ZeroDivisionError:
         uniformity = np.full(max(max(clusters)+1,1),-1)
+
 
     # We return an array to keep consistency with the rest of the descriptors
     return np.array([uniformity[clusters[i]] for i in np.arange(len(clusters))])
@@ -263,21 +277,43 @@ def calculateUniformity(cliques, clusters, features):
 ############# MAIN FUNCTION #############
 
 # Function to extract the descriptors of a video
-def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, max_num_features, out_file = "descriptors", model = None, range_max = None, min_puntos = 10):
+def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, max_num_features, out_file = "descriptors", min_puntos = 10, use_sift = False, others = {}):
     
     #FAST algorithm for feature detection
     fast = cv.FastFeatureDetector_create()
     fast.setThreshold(fast_threshold)
 
     sift = cv.SIFT_create(nfeatures = max_num_features)
-    
+
+    if use_sift:
+        detector = sift
+    else:
+        detector = fast
+
     # The video feed is read in as a VideoCapture object
     cap = cv.VideoCapture(video_file)
 
-    # ret = a boolean return value from getting the frame, first_frame = the first frame in the entire video sequence
+    if "num_frames" in others:
+        num_frames = others["num_frames"]+L
+    else:
+        num_frames = int(cap.get(cv.CAP_PROP_FRAME_COUNT))
+
+    if "skip_frames" in others:
+        for i in range(others["skip_frames"]):
+            video_open, prev_frame = cap.read()
+            
     video_open, prev_frame = cap.read()
 
-    height, width = prev_frame.shape[:2]
+    if "change_resolution" in others:
+        height = others["change_resolution"]
+        prev_frame = cv.resize(prev_frame, (int((prev_frame.shape[1]/prev_frame.shape[0]) * height), height))
+    else:
+        height = prev_frame.shape[0]
+
+    width = prev_frame.shape[1]
+
+    # Resolution related params
+    clusters_e = (width+height)/50
 
     # Delaunay Subdivision Function
     delaunay = cv.Subdiv2D()
@@ -288,7 +324,7 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, m
 
     # Feature detection
     try:
-        prev_key = sift.detect(prev_frame,None)
+        prev_key = detector.detect(prev_frame,None)
         prev_aux = cv.KeyPoint_convert(prev_key)
         prev_aux = prev_aux.reshape(-1, 1, 2)
 
@@ -302,14 +338,14 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, m
     except:
         pass
     
-    while(video_open):
+    while(video_open and it < num_frames):
         it += 1
         
         if(it % L == 0):
             # Feature detection
             try:
                 prev = prev_aux.copy()
-                prev_key = sift.detect(prev_frame,None)
+                prev_key = detector.detect(prev_frame,None)
                 prev_aux = cv.KeyPoint_convert(prev_key)
                 prev_aux = prev_aux.reshape(-1, 1, 2)            
 
@@ -330,44 +366,44 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, m
             if len(trayectories) > 0:
                 arr_trayectories = np.array(trayectories)
                 velocity_x, velocity_y, prev, arr_trayectories = calculateMovement(prev,arr_trayectories,
-                                                                                   (height+width)*min_motion*(-t1), t1 = t1, erase_slow = True)
+                                                                                   min_motion*(-t1), t1 = t1, erase_slow = True)
+                if len(prev) > max_num_features and max_num_features != -1:
+                    print("Limite sobrepasado {}".format(len(prev)))
+                    velocity_x, velocity_y, prev, arr_trayectories = filter_fast_features(velocity_x, velocity_y,
+                                                                                          prev, arr_trayectories, max_num_features)
                 trayectories = arr_trayectories.tolist()
                 
 
             if len(prev) > min_puntos:
-
                 dir_var = calculateDirectionVar(arr_trayectories, t2 = t2)                
-
                 # Delaunay representation
                 rect = (0, 0, prev_frame.shape[1], prev_frame.shape[0])
                 delaunay.initDelaunay(rect)
-                
                 for point in prev:
                     a, b = point.ravel()[:2]
                     if(imgContains(frame,(a,b))):
                         delaunay.insert((a,b))
                 
                 cliques = getCliques(delaunay, prev)
-
+                
                 # Interactive Behaviours
                 stability = calculateStability(cliques,arr_trayectories)
-
                 collectiveness, conflict = calculateCollectivenessAndConflict(cliques,arr_trayectories, t1 = t1)
-
                 density = calculateDensity(cliques,prev)
-
-                clusters = getClusters(prev)
+                
+                clusters = getClusters(prev, e = clusters_e)
+                
                 uniformity = calculateUniformity(cliques, clusters, prev)
-
+                    
                 # Image representation for visualizing results
                 #addTrayectoriesToImage(trayectories,frame)
                 #addDelaunayToImage(delaunay,frame)
                 #addCliqueToImage(cliques, -1, frame,trayectories)
                 #addClustersToImage(clusters,prev,frame)
 
-                if model is not None:
-                    frame = addPrediction(frame,model,
-                                      (velocity_x, velocity_y, dir_var, stability, collectiveness, conflict, density, uniformity), range_max)
+                # if model is not None:
+                #     frame = addPrediction(frame,model,
+                #                       (velocity_x, velocity_y, dir_var, stability, collectiveness, conflict, density, uniformity), range_max)
 
             else:
                 velocity_x = np.zeros(1)
@@ -381,13 +417,15 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, m
 
             # We save the data into a file
             descriptores = [velocity_x, velocity_y, dir_var, stability, collectiveness, conflict, density, uniformity]
-            pickle.dump(descriptores, data_file)        
+            pickle.dump(descriptores, data_file)
 
             cv.imshow("Crowd", frame)            
-        
+
         video_open, frame = cap.read()
         
         if video_open:
+            frame = cv.resize(frame, (int((frame.shape[1]/frame.shape[0]) * height), height))
+            
             # Calculates sparse optical flow by Lucas-Kanade method
             # https://docs.opencv.org/3.0-beta/modules/video/doc/motion_analysis_and_object_tracking.html#calcopticalflowpyrlk
         
@@ -430,8 +468,7 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, m
         
                 for i, (new) in enumerate(good_new):
                     # Adds the new coordinates to the graph and the trayectories
-                    a, b = new.ravel()
-                    trayectories_aux[i].append(np.array((a,b)))
+                    trayectories_aux[i].append(np.array((new[0],new[1])))
                     if( len(trayectories_aux[i]) > L ):
                         del trayectories_aux[i][0]
         
@@ -445,7 +482,7 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, m
     
     # Frames are read by intervals of 1 milliseconds. The function ends after the user presses the 'q' key
         if cv.waitKey(1) & 0xFF == ord('q'):
-            break
+           break
 
     # The following frees up resources and closes all windows
     cap.release()
