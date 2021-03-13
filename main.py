@@ -199,15 +199,17 @@ skip_extraction = False
 results_file = open("results.txt","w")
 
 for L in [5,10]:
-    for t1 in [-3,-4,-5]:
+    for t1 in [-3,-5]:
         for t2 in [1,2]:
-            for min_motion in [0.01,0.025,0.05]:
-                for fast_threshold in [10,20,30]:
+            for min_motion in [0.025,0.05]:
+                for fast_threshold in [10,20]:
                     params = {"L":L, "t1":t1, "t2":t2, "min_motion":min_motion, "fast_threshold":fast_threshold, "others":{}}
                     results_file.write(str(params)+"\n")
+                    results_file.flush()
                     start = time.time()
-                    acc, auc, C, n_bins = try_CVD( params, verbose = False)
+                    acc, auc, C, n_bins = try_CVD( params, verbose = True)
                     results_file.write("Acc: "+str(acc)+" AUC: "+str(auc)+" C: "+str(C)+" Nº bins: "+str(n_bins)+" Time: "+str(time.time()-start)+"\n")
+                    results_file.flush()
 
 results_file.close()
 #acc, auc, C, n_bins = try_UMN(1,params, verbose = True)
