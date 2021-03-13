@@ -7,10 +7,9 @@ from sklearn.svm import SVC
 
 from files import read_Labels
 
-def get_Range_Descriptors(files, video_classification, n_descriptors = 8):
+def get_Range_Descriptors(files, is_video_classification, n_descriptors = 8):
     # Max value of every descriptor on training
     maximos = np.zeros(n_descriptors)
-    minimos = np.empty(n_descriptors)
     for des_file in files:
         labels = read_Labels(des_file+".labels")
 
@@ -20,32 +19,28 @@ def get_Range_Descriptors(files, video_classification, n_descriptors = 8):
             try:
                 descriptores = pickle.load(f)
 
-                if video_classification:
+                if is_video_classification:
                     label = labels[0]
                 else:
                     label = labels[k]
 
+                # Anomaly values aren't taken into account
                 if label != -1:
                     for i, d in enumerate(descriptores):
+                        # We use percentile to remove the outliers
                         aux = np.percentile(d,90)
-                        #aux_min = min(d)
                     
                         if aux > maximos[i]:
                             maximos[i] = aux
-                        # if minimos[i] is not None:
-                        #     if aux_min < minimos[i]:
-                        #         minimos[i] = aux_min
-                        # else:
-                        #    minimos[i] = aux_min
 
                 k += 1
 
-            except:
+            except EOFError:
                 break
     
         f.close()
 
-    return maximos, np.zeros(n_descriptors)#minimos
+    return maximos, np.zeros(n_descriptors)
 
 # Function to get the normalized histograms of a set of descriptors
 def get_Histograms(des_file, range_max, range_min, n_bins, eliminar_descriptores):
@@ -59,10 +54,12 @@ def get_Histograms(des_file, range_max, range_min, n_bins, eliminar_descriptores
             descriptores = pickle.load(f)
             if len(descriptores[0]) > 1:
                 for i, d in enumerate(descriptores):
-                    if i not in eliminar_descriptores:
-                        h = np.histogram(d, bins = n_bins, range = (range_min[i],range_max[i]))[0]
-                    else:
+                    
+                    if i in eliminar_descriptores:
                         h = np.zeros(n_bins)
+                    else:
+                        h = np.histogram(d, bins = n_bins, range = (range_min[i],range_max[i]))[0]
+                        
                     norm = np.linalg.norm(h)
                     
                     if norm != 0:
@@ -77,8 +74,8 @@ def get_Histograms(des_file, range_max, range_min, n_bins, eliminar_descriptores
 
             k += 1
                 
-        except:
-                break
+        except EOFError:
+            break
 
     f.close()
 
@@ -86,12 +83,27 @@ def get_Histograms(des_file, range_max, range_min, n_bins, eliminar_descriptores
         
     return histograms, vacios
 
-def prepare_Hist_and_Labels(files, range_max,range_min, video_classification, n_bins, eliminar_descriptores, eliminar_vacios =False):
+def prepare_Hist_and_Labels(files, range_max,range_min, is_video_classification, n_bins, eliminar_descriptores, eliminar_vacios =False):
     histograms = []
     labels = []
     
     for f in files:
-        if not video_classification:
+        if is_video_classification:
+            h, vacios = get_Histograms(f, range_max, range_min, n_bins, eliminar_descriptores)
+
+            # We remove frames without information to get a more reliable average
+            for i in range(len(vacios)-1,0,-1):
+                del h[vacios[i]] 
+
+            # The values of the video are the average of the values in all frames
+            h = [sum(x)/len(x) for x in zip(*h)]
+            
+            if len(h) != 0:
+                histograms.append(h)
+            
+                labels += read_Labels(f+".labels")
+            
+        else:
             h, vacios = get_Histograms(f, range_max, range_min, n_bins, eliminar_descriptores)
             lab = read_Labels(f+".labels")
 
@@ -103,17 +115,7 @@ def prepare_Hist_and_Labels(files, range_max,range_min, video_classification, n_
             histograms += h
             labels += lab
             
-        else:
-            h, vacios = get_Histograms(f, range_max, range_min, n_bins, eliminar_descriptores)
             
-            for i in range(len(vacios)-1,0,-1):
-                del h[vacios[i]] 
-                    
-            h = [sum(x)/len(x) for x in zip(*h)]
-            if len(h) != 0:
-                histograms.append(h)
-            
-                labels += read_Labels(f+".labels")
 
     return histograms, labels
 
@@ -124,7 +126,7 @@ def train_and_Test_SVC(training, test, C, video_classification, n_bins, eliminar
 
     model = train_SVC(hist, labels, C = C)
             
-    hist, labels = prepare_Hist_and_Labels(test, range_max,range_min, video_classification, eliminar_descriptores, n_bins)
+    hist, labels = prepare_Hist_and_Labels(test, range_max,range_min, video_classification, n_bins, eliminar_descriptores)
         
     prediction = test_SVM(hist, model, video_classification)
 

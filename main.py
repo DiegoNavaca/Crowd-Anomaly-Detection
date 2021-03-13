@@ -12,12 +12,12 @@ from files import get_Ground_Truth
 from files import get_Classes
 from SVM import train_and_Test_SVC
 
-def try_Dataset(dataset, descriptors_dir, video_dir, params, tam_test, verbose = True, video_classification = False, C_vals = (5,10,25), bin_vals = (16,32)):
+def try_Dataset(dataset, descriptors_dir, video_dir, params, tam_test, verbose = True, is_video_classification = False, C_vals = (5,10,25), bin_vals = (16,32)):
     
     gt = get_Ground_Truth("Datasets/"+dataset+"/ground_truth.txt")
 
     start = time.time()
-    extract_Descriptors_Dir(params, video_dir, descriptors_dir,gt, verbose, video_classification, skip_extraction)
+    extract_Descriptors_Dir(params, video_dir, descriptors_dir,gt, verbose, is_video_classification, skip_extraction)
     if verbose:
         print(time.time()-start)
 
@@ -36,7 +36,7 @@ def try_Dataset(dataset, descriptors_dir, video_dir, params, tam_test, verbose =
                 test = names[i*tam_test:i*tam_test+tam_test]
                 training = names[:i*tam_test]+names[i*tam_test+tam_test:]
 
-                prediction, labels = train_and_Test_SVC(training, test, C, video_classification, n_bins)
+                prediction, labels = train_and_Test_SVC(training, test, C, is_video_classification, n_bins)
     
                 acc = accuracy_score(labels,prediction)
                 try:
@@ -162,7 +162,7 @@ def try_CVD(params, verbose = True):
 
     #params["use_sift"] = 2000
 
-    acc, auc, C, n_bins = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir, params, 50, verbose, video_classification = True, C_vals = (1,5,10,25))
+    acc, auc, C, n_bins = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir, params, 50, verbose, is_video_classification = True, C_vals = (1,5,10,25))
 
     print("RESULTADOS:")
     print("C: {}\tNº bins: {}".format(C,n_bins))
@@ -193,10 +193,10 @@ def try_CUHK(params, verbose = True):
 
 skip_extraction = False
 
-params = {"L":30, "t1":-5, "t2":1, "min_motion":0.025, "fast_threshold":20, "others":{}}
+params = {"L":10, "t1":-5, "t2":1, "min_motion":0.025, "fast_threshold":20, "others":{}}
 print(params)
-#acc, auc, C, n_bins = try_UMN(2,params, verbose = True)
-acc, auc, C, n_bins = try_CVD( params, verbose = True)
+acc, auc, C, n_bins = try_UMN(1,params, verbose = True)
+#acc, auc, C, n_bins = try_CVD( params, verbose = True)
 #acc, conf_mat, C, n_bins = try_CUHK( params, verbose = True)
 
 
