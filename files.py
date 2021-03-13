@@ -3,7 +3,6 @@ import glob
 import time
 import pickle
 
-import numpy as np
 import cv2 as cv
 
 from descriptors import extract_descriptors
@@ -38,7 +37,8 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = True, v
                 video_start = time.time()
                 extract_descriptors(video, params["L"], params["t1"], params["t2"], params["min_motion"],
                                     params["fast_threshold"], data_file, others = params["others"])
-                print("Tiempo extraccion: {:1.3f} / {:1.3f}".format(time.time()-video_start, time.time()-start))
+                if verbose:
+                    print("Tiempo extraccion: {:1.3f} / {:1.3f}".format(time.time()-video_start, time.time()-start))
 
             # We also store the labels in a .labels file
             if video_classification:
@@ -53,7 +53,8 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = True, v
             labels_file.close()
 
         except AssertionError:
-            print("{} is not a video".format(video))
+            if verbose:
+                print("{} is not a video".format(video))
 
     if verbose:
         print("Tiempo de extraccion total: {:1.3f}".format(time.time()-start))

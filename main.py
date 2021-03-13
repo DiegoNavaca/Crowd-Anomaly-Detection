@@ -149,10 +149,11 @@ def try_UMN(escena, params, verbose = True):
 
     acc, auc, C, n_bins = try_Dataset("UMN", descriptors_dir, video_dir, params, 1, verbose)
 
-    print("RESULTADOS:")
-    print("C: {}\tNº bins: {}".format(C,n_bins))
-    print("Accuracy: {:1.3f}".format(acc))
-    print("AUC: {:1.3f}".format(auc))
+    if verbose:
+        print("RESULTADOS:")
+        print("C: {}\tNº bins: {}".format(C,n_bins))
+        print("Accuracy: {:1.3f}".format(acc))
+        print("AUC: {:1.3f}".format(auc))
 
     return acc, auc, C, n_bins
 
@@ -164,10 +165,11 @@ def try_CVD(params, verbose = True):
 
     acc, auc, C, n_bins = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir, params, 50, verbose, is_video_classification = True, C_vals = (1,5,10,25))
 
-    print("RESULTADOS:")
-    print("C: {}\tNº bins: {}".format(C,n_bins))
-    print("Accuracy: {:1.3f}".format(acc))
-    print("AUC: {:1.3f}".format(auc))
+    if verbose:
+        print("RESULTADOS:")
+        print("C: {}\tNº bins: {}".format(C,n_bins))
+        print("Accuracy: {:1.3f}".format(acc))
+        print("AUC: {:1.3f}".format(auc))
     
     return acc, auc, C, n_bins
 
@@ -182,10 +184,11 @@ def try_CUHK(params, verbose = True):
 
     acc, conf_mat, C, n_bins = try_Multiclass("CUHK", descriptors_dir, video_dir, params, 25, verbose, remove_same_scenes = False, C_vals = (8,16,32,64,128))
 
-    print("RESULTADOS:")
-    print("C: {}\tNº bins: {}".format(C,n_bins))
-    print("Accuracy: {:1.3f}".format(acc))
-    print("{}".format(conf_mat)) # row: class   column: prediction
+    if verbose:
+        print("RESULTADOS:")
+        print("C: {}\tNº bins: {}".format(C,n_bins))
+        print("Accuracy: {:1.3f}".format(acc))
+        print("{}".format(conf_mat)) # row: class   column: prediction
     
     return acc, conf_mat, C, n_bins
 
@@ -193,9 +196,21 @@ def try_CUHK(params, verbose = True):
 
 skip_extraction = False
 
-params = {"L":10, "t1":-5, "t2":1, "min_motion":0.025, "fast_threshold":20, "others":{}}
-print(params)
-acc, auc, C, n_bins = try_UMN(1,params, verbose = True)
+results_file = open("results.txt","w")
+
+for L in [5,10]:
+    for t1 in [-3,-4,-5]:
+        for t2 in [1,2]:
+            for min_motion in [0.01,0.025,0.05]:
+                for fast_threshold in [10,20,30]:
+                    params = {"L":L, "t1":t1, "t2":t2, "min_motion":min_motion, "fast_threshold":fast_threshold, "others":{}}
+                    results_file.write(str(params))
+                    start = time.time()
+                    acc, auc, C, n_bins = try_CVD( params, verbose = False)
+                    results_file.write("Acc: "+str(acc)+" AUC: "+str(auc)+" C: "+str(C)+" Nº bins: "+str(n_bins)+" Time: "+str(time.time()-start))
+
+results_file.close()
+#acc, auc, C, n_bins = try_UMN(1,params, verbose = True)
 #acc, auc, C, n_bins = try_CVD( params, verbose = True)
 #acc, conf_mat, C, n_bins = try_CUHK( params, verbose = True)
 
