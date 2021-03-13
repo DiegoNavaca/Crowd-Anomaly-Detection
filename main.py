@@ -204,10 +204,10 @@ for L in [5,10]:
             for min_motion in [0.01,0.025,0.05]:
                 for fast_threshold in [10,20,30]:
                     params = {"L":L, "t1":t1, "t2":t2, "min_motion":min_motion, "fast_threshold":fast_threshold, "others":{}}
-                    results_file.write(str(params))
+                    results_file.write(str(params)+"\n")
                     start = time.time()
                     acc, auc, C, n_bins = try_CVD( params, verbose = False)
-                    results_file.write("Acc: "+str(acc)+" AUC: "+str(auc)+" C: "+str(C)+" Nº bins: "+str(n_bins)+" Time: "+str(time.time()-start))
+                    results_file.write("Acc: "+str(acc)+" AUC: "+str(auc)+" C: "+str(C)+" Nº bins: "+str(n_bins)+" Time: "+str(time.time()-start)+"\n")
 
 results_file.close()
 #acc, auc, C, n_bins = try_UMN(1,params, verbose = True)

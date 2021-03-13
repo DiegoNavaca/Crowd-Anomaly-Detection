@@ -129,7 +129,7 @@ def getClusters(features, mini = 2, e = 10):
  
 ############# METRICS #############
 
-@jit(nopython = True, parallel = True)
+@jit(nopython = True)
 def calculateMovement(features, trayectories, min_motion, erase_slow = False, t1 = -6):
     velocity_x = np.zeros(len(trayectories),dtype = numba.float64)
     velocity_y = np.zeros(len(trayectories),dtype = numba.float64)
@@ -151,7 +151,7 @@ def calculateMovement(features, trayectories, min_motion, erase_slow = False, t1
 
     return velocity_x, velocity_y , features , trayectories
 
-@jit(nopython = True, parallel = True)
+@jit(nopython = True)
 def calculateDirectionVar(trayectories, t2 = 1):
     direction_variation = np.zeros(len(trayectories))
 
@@ -179,7 +179,7 @@ def calculateStability(cliques, trayectories, t2 = 1):
 
     return stability
 
-@jit(nopython = True, parallel = True)
+@jit(nopython = True)
 def auxCollectivenessAndConflict(clique,trayectories, k, t1):
     collectiveness = 0
     conflict = 0
@@ -206,7 +206,7 @@ def calculateCollectivenessAndConflict(cliques, trayectories,t1 = 0):
 
     return collectiveness, conflict
 
-@jit(nopython = True, parallel = True)
+@jit(nopython = True)
 def auxDensity(clique, features, bandwidth, i):
     density = 0
     for j in np.arange(len(clique)):
@@ -222,7 +222,7 @@ def calculateDensity(cliques,features, bandwidth = 0.5):
         
     return density
 
-@jit(nopython = True, parallel = True)
+@jit(nopython = True)
 def auxUniformity(clique, features, f, clusters):
 
     inter_cluster = np.zeros(max(max(clusters)+1,1))
