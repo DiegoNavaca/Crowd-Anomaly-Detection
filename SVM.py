@@ -86,7 +86,7 @@ def get_Histograms(des_file, range_max, range_min, n_bins, eliminar_descriptores
         
     return histograms, vacios
 
-def prepare_Hist_and_Labels(files, range_max,range_min, video_classification, n_bins, eliminar_vacios =False, eliminar_descriptores):
+def prepare_Hist_and_Labels(files, range_max,range_min, video_classification, n_bins, eliminar_descriptores, eliminar_vacios =False):
     histograms = []
     labels = []
     
@@ -120,11 +120,11 @@ def prepare_Hist_and_Labels(files, range_max,range_min, video_classification, n_
 def train_and_Test_SVC(training, test, C, video_classification, n_bins, eliminar_descriptores = []):
     range_max, range_min = get_Range_Descriptors(training, video_classification)
 
-    hist, labels = prepare_Hist_and_Labels(training, range_max,range_min, video_classification, n_bins, eliminar_vacios = True, eliminar_descriptores)
+    hist, labels = prepare_Hist_and_Labels(training, range_max,range_min, video_classification, n_bins, eliminar_descriptores, eliminar_vacios = True)
 
     model = train_SVC(hist, labels, C = C)
             
-    hist, labels = prepare_Hist_and_Labels(test, range_max,range_min, video_classification, n_bins, eliminar_descriptores)
+    hist, labels = prepare_Hist_and_Labels(test, range_max,range_min, video_classification, eliminar_descriptores, n_bins)
         
     prediction = test_SVM(hist, model, video_classification)
 

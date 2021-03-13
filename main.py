@@ -191,7 +191,7 @@ def try_CUHK(params, verbose = True):
 
 #######################################################################
 
-skip_extraction = True
+skip_extraction = False
 
 params = {"L":30, "t1":-5, "t2":1, "min_motion":0.025, "fast_threshold":20, "others":{}}
 print(params)
