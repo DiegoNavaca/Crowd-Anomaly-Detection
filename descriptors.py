@@ -223,7 +223,7 @@ def calculateDensity(cliques,features, bandwidth = 0.5):
     return density
 
 @jit(nopython = True)
-def auxUniformity(clique, features, f, clusters, dist_matrix):
+def auxUniformity(clique, features, f, clusters):
 
     inter_cluster = np.zeros(max(max(clusters)+1,1))
     intra_cluster = np.zeros(len(inter_cluster))
@@ -232,33 +232,29 @@ def auxUniformity(clique, features, f, clusters, dist_matrix):
     for i in np.arange(len(clique)):
         elem = int(clique[i])
         # We measure the distance if we have to
-        if dist_matrix[f][elem] == 0:
-            dist_matrix[f][elem] = np.linalg.norm(features[f][0] - features[elem][0])
-            dist_matrix[elem][f] = dist_matrix[f][elem]
+        dist = np.linalg.norm(features[f][0] - features[elem][0])
         # We follow the formula for the uniformity of each cluster
         if(f != elem):
             if(clusters[f] == clusters[elem]):
-                intra_cluster[clusters[f]] += 1 / dist_matrix[f][elem]
+                intra_cluster[clusters[f]] += 1 / dist
             else:
-                inter_cluster[clusters[f]] += 1 / dist_matrix[f][elem]
-            total_sum += 1 / dist_matrix[f][elem]
+                inter_cluster[clusters[f]] += 1 / dist
+            total_sum += 1 / dist
 
-    return total_sum, intra_cluster, inter_cluster, dist_matrix
+    return total_sum, intra_cluster, inter_cluster
 
 def calculateUniformity(cliques, clusters, features):
     #Initialization
     uniformity = np.zeros(max(max(clusters)+1,1))
     inter_cluster = np.zeros(len(uniformity))
-    intra_cluster = inter_cluster.copy()
+    intra_cluster = np.zeros(len(uniformity))
     total_sum = 0
-
-    dist_matrix = np.zeros((len(features),len(features)),dtype = float)
 
     # For every pair of point in each clique
    
     for f in np.arange(len(features)):
         
-        total, intra, inter, dist_matrix = auxUniformity(np.array(cliques[f]), features, f, clusters, dist_matrix)
+        total, intra, inter = auxUniformity(np.array(cliques[f]), features, f, clusters)
         total_sum += total
         intra_cluster = intra_cluster + intra
         inter_cluster = inter_cluster + inter
@@ -277,18 +273,16 @@ def calculateUniformity(cliques, clusters, features):
 ############# MAIN FUNCTION #############
 
 # Function to extract the descriptors of a video
-def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, max_num_features, out_file = "descriptors", min_puntos = 10, use_sift = False, others = {}):
+def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, out_file = "descriptors", min_puntos = 10, others = {}):
     
-    #FAST algorithm for feature detection
-    fast = cv.FastFeatureDetector_create()
-    fast.setThreshold(fast_threshold)
-
-    sift = cv.SIFT_create(nfeatures = max_num_features)
-
-    if use_sift:
-        detector = sift
+    #Algorithm for feature detection
+    if "use_sift" in others:
+        # SIFT
+        detector = cv.SIFT_create(nfeatures = others["use_sift"])
     else:
-        detector = fast
+        # FAST
+        detector = cv.FastFeatureDetector_create()
+        detector.setThreshold(fast_threshold)
 
     # The video feed is read in as a VideoCapture object
     cap = cv.VideoCapture(video_file)
@@ -367,10 +361,10 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, m
                 arr_trayectories = np.array(trayectories)
                 velocity_x, velocity_y, prev, arr_trayectories = calculateMovement(prev,arr_trayectories,
                                                                                    min_motion*(-t1), t1 = t1, erase_slow = True)
-                if len(prev) > max_num_features and max_num_features != -1:
-                    print("Limite sobrepasado {}".format(len(prev)))
-                    velocity_x, velocity_y, prev, arr_trayectories = filter_fast_features(velocity_x, velocity_y,
-                                                                                          prev, arr_trayectories, max_num_features)
+                # if len(prev) > max_num_features and max_num_features != -1:
+                #     print("Limite sobrepasado {}".format(len(prev)))
+                #     velocity_x, velocity_y, prev, arr_trayectories = filter_fast_features(velocity_x, velocity_y,
+                #                                                                           prev, arr_trayectories, max_num_features)
                 trayectories = arr_trayectories.tolist()
                 
 
@@ -392,7 +386,7 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, m
                 density = calculateDensity(cliques,prev)
                 
                 clusters = getClusters(prev, e = clusters_e)
-                
+
                 uniformity = calculateUniformity(cliques, clusters, prev)
                     
                 # Image representation for visualizing results
@@ -419,7 +413,7 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, m
             descriptores = [velocity_x, velocity_y, dir_var, stability, collectiveness, conflict, density, uniformity]
             pickle.dump(descriptores, data_file)
 
-            cv.imshow("Crowd", frame)            
+            #cv.imshow("Crowd", frame)            
 
         video_open, frame = cap.read()
         
@@ -481,8 +475,8 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, m
                 pass
     
     # Frames are read by intervals of 1 milliseconds. The function ends after the user presses the 'q' key
-        if cv.waitKey(1) & 0xFF == ord('q'):
-           break
+        #if cv.waitKey(1) & 0xFF == ord('q'):
+        #   break
 
     # The following frees up resources and closes all windows
     cap.release()

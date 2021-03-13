@@ -37,9 +37,8 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = True, v
 
                 video_start = time.time()
                 extract_descriptors(video, params["L"], params["t1"], params["t2"], params["min_motion"],
-                                    params["fast_threshold"], params["max_num_features"], data_file,
-                                    use_sift = params["use_sift"], others = params["others"])
-                print("Tiempo extraccion: {:1.3f}".format(time.time()-start))
+                                    params["fast_threshold"], data_file, others = params["others"])
+                print("Tiempo extraccion: {:1.3f} / {:1.3f}".format(time.time()-video_start, time.time()-start))
 
             # We also store the labels in a .labels file
             if video_classification:
@@ -76,6 +75,7 @@ def get_Ground_Truth(in_file):
         
     return gt
 
+# Separates the videos into their classes
 def get_Classes(in_file):
     f = open(in_file,"r")
     classes = {}
@@ -91,7 +91,7 @@ def get_Classes(in_file):
 
     return classes
 
-# Reads the labels from a file (list format)
+# Reads the labels from a file
 def read_Labels(labels_file):
     f = open(labels_file,"rb")
     labels = pickle.load(f)
