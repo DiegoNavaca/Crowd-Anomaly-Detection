@@ -16,8 +16,6 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = True, v
     start = time.time()
     
     for i, video in enumerate(glob.glob(input_dir+"**", recursive = True)):
-        if verbose:
-            print("{} - {}".format(i,video))
         try:
             # Check if file is a video
             assert  video.split("/")[-1][-4:]  in (".avi", ".mp4")
@@ -27,6 +25,8 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = True, v
 
             data_file = output_dir+name+".data"
             if not skip_extraction:
+                if verbose:
+                    print("{} - {}".format(i,video))
                 if os.path.exists(data_file):
                     os.remove(data_file)
 

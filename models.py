@@ -2,8 +2,9 @@ import joblib
 import pickle
 import numpy as np
 from sklearn.svm import OneClassSVM
-from sklearn.svm import NuSVC
 from sklearn.svm import SVC
+from sklearn.neural_network import MLPClassifier
+from sklearn.model_selection import GridSearchCV
 
 from files import read_Labels
 
@@ -124,11 +125,11 @@ def train_and_Test_SVC(training, test, C, video_classification, n_bins, eliminar
 
     hist, labels = prepare_Hist_and_Labels(training, range_max,range_min, video_classification, n_bins, eliminar_descriptores, eliminar_vacios = True)
 
-    model = train_SVC(hist, labels, C = C)
+    model = train_Network(hist, labels)
             
     hist, labels = prepare_Hist_and_Labels(test, range_max,range_min, video_classification, n_bins, eliminar_descriptores)
         
-    prediction = test_SVM(hist, model, video_classification)
+    prediction = test_model(hist, model, video_classification)
 
     return prediction, labels
 
@@ -145,9 +146,26 @@ def train_SVC(samples, labels, out_file = None, C = 10):
     if out_file is not None:
         joblib.dump(svm, out_file)
 
-    return svm 
+    return svm
 
-def test_SVM(samples, model, video_classification):
+def train_Network(samples, labels,out_file = None):
+    model = MLPClassifier(max_iter = 2000)
+    tam = len(samples[0])
+    params = {"hidden_layer_sizes":(tam//2,(tam//2,tam//3),(tam//2,tam//3,tam//4)), "solver":("adam","lbfgs")
+              , "alpha": (0.0001,0.001,0.01)}
+
+    gs = GridSearchCV(model, params, cv = 10, n_jobs = -1, scoring = "balanced_accuracy")
+
+    gs.fit(samples,labels)
+    print(gs.best_params_, gs.best_score_)
+    model = gs.best_estimator_
+
+    if out_file is not None:
+        joblib.dump(model, out_file)
+
+    return model
+
+def test_model(samples, model, video_classification):
     prediction = model.predict(samples)
 
     if not video_classification:    

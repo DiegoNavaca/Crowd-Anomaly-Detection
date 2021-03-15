@@ -10,7 +10,7 @@ from math import ceil
 from files import extract_Descriptors_Dir
 from files import get_Ground_Truth
 from files import get_Classes
-from SVM import train_and_Test_SVC
+from models import train_and_Test_SVC
 
 def try_Dataset(dataset, descriptors_dir, video_dir, params, tam_test, verbose = True, is_video_classification = False, C_vals = (5,10,25), bin_vals = (16,32)):
     
@@ -163,7 +163,8 @@ def try_CVD(params, verbose = True):
 
     #params["use_sift"] = 2000
 
-    acc, auc, C, n_bins = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir, params, 50, verbose, is_video_classification = True, C_vals = (1,5,10,25))
+    #acc, auc, C, n_bins = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir, params, 50, verbose, is_video_classification = True, C_vals = (1,5,10,25))
+    acc, auc, C, n_bins = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir, params, 50, verbose, is_video_classification = True, C_vals = [1], bin_vals = (16,32,64))
 
     if verbose:
         print("RESULTADOS:")
@@ -194,26 +195,28 @@ def try_CUHK(params, verbose = True):
 
 #######################################################################
 
-skip_extraction = False
+skip_extraction = True
 
-results_file = open("results.txt","w")
+# results_file = open("results.txt","w")
 
-for L in [5,10]:
-    for t1 in [-3,-5]:
-        for t2 in [1,2]:
-            for min_motion in [0.025,0.05]:
-                for fast_threshold in [10,20]:
-                    params = {"L":L, "t1":t1, "t2":t2, "min_motion":min_motion, "fast_threshold":fast_threshold, "others":{}}
-                    results_file.write(str(params)+"\n")
-                    results_file.flush()
-                    start = time.time()
-                    acc, auc, C, n_bins = try_CVD( params, verbose = True)
-                    results_file.write("Acc: "+str(acc)+" AUC: "+str(auc)+" C: "+str(C)+" Nº bins: "+str(n_bins)+" Time: "+str(time.time()-start)+"\n")
-                    results_file.flush()
+# for L in [5,10]:
+#     for t1 in [-3,-5]:
+#         for t2 in [1,2]:
+#             for min_motion in [0.025,0.05]:
+#                 for fast_threshold in [10,20]:
+#                     params = {"L":L, "t1":t1, "t2":t2, "min_motion":min_motion, "fast_threshold":fast_threshold, "others":{}}
+#                     results_file.write(str(params)+"\n")
+#                     results_file.flush()
+#                     start = time.time()
+#                     acc, auc, C, n_bins = try_CVD( params, verbose = True)
+#                     results_file.write("Acc: "+str(acc)+" AUC: "+str(auc)+" C: "+str(C)+" Nº bins: "+str(n_bins)+" Time: "+str(time.time()-start)+"\n")
+#                     results_file.flush()
 
-results_file.close()
+# results_file.close()
+
+params = {"L":15, "t1":-5, "t2":1, "min_motion":0.025, "fast_threshold":20, "others":{}}
 #acc, auc, C, n_bins = try_UMN(1,params, verbose = True)
-#acc, auc, C, n_bins = try_CVD( params, verbose = True)
+acc, auc, C, n_bins = try_CVD( params, verbose = True)
 #acc, conf_mat, C, n_bins = try_CUHK( params, verbose = True)
 
 
