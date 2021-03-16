@@ -365,8 +365,7 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
                 #     print("Limite sobrepasado {}".format(len(prev)))
                 #     velocity_x, velocity_y, prev, arr_trayectories = filter_fast_features(velocity_x, velocity_y,
                 #                                                                           prev, arr_trayectories, max_num_features)
-                trayectories = arr_trayectories.tolist()
-                
+                trayectories = arr_trayectories.tolist()                
 
             if len(prev) > min_puntos:
                 dir_var = calculateDirectionVar(arr_trayectories, t2 = t2)                

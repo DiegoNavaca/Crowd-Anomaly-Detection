@@ -3,13 +3,14 @@ import glob
 import time
 import pickle
 
-import numpy as np
 import cv2 as cv
 
 from descriptors import extract_descriptors
 
 # Extracts the descriptors of all files in a directory and saves them in separate files
-def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = True, video_classification = False, skip_extraction = False):
+def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = 1, video_classification = False, skip_extraction = False):
+    if verbose:
+        verbose -= 1
     # The descriptors are stored in a .data file in the output directory
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -17,8 +18,6 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = True, v
     start = time.time()
     
     for i, video in enumerate(glob.glob(input_dir+"**", recursive = True)):
-        if verbose:
-            print("{} - {}".format(i,video))
         try:
             # Check if file is a video
             assert  video.split("/")[-1][-4:]  in (".avi", ".mp4")
@@ -28,6 +27,8 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = True, v
 
             data_file = output_dir+name+".data"
             if not skip_extraction:
+                if verbose:
+                    print("{} - {}".format(i,video))
                 if os.path.exists(data_file):
                     os.remove(data_file)
 
@@ -38,7 +39,8 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = True, v
                 video_start = time.time()
                 extract_descriptors(video, params["L"], params["t1"], params["t2"], params["min_motion"],
                                     params["fast_threshold"], data_file, others = params["others"])
-                print("Tiempo extraccion: {:1.3f} / {:1.3f}".format(time.time()-video_start, time.time()-start))
+                if verbose:
+                    print("Tiempo extraccion: {:1.3f} / {:1.3f}".format(time.time()-video_start, time.time()-start))
 
             # We also store the labels in a .labels file
             if video_classification:
@@ -53,7 +55,8 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = True, v
             labels_file.close()
 
         except AssertionError:
-            print("{} is not a video".format(video))
+            if verbose:
+                print("{} is not a video".format(video))
 
     if verbose:
         print("Tiempo de extraccion total: {:1.3f}".format(time.time()-start))
