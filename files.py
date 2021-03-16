@@ -8,7 +8,9 @@ import cv2 as cv
 from descriptors import extract_descriptors
 
 # Extracts the descriptors of all files in a directory and saves them in separate files
-def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = True, video_classification = False, skip_extraction = False):
+def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = 1, video_classification = False, skip_extraction = False):
+    if verbose:
+        verbose -= 1
     # The descriptors are stored in a .data file in the output directory
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)

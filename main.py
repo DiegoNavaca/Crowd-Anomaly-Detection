@@ -2,196 +2,116 @@ import glob
 import time
 import numpy as np
 
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import roc_auc_score
 from sklearn.metrics import confusion_matrix
 from math import ceil
+from operator import mul
+from functools import reduce
 
 from files import extract_Descriptors_Dir
 from files import get_Ground_Truth
 from files import get_Classes
-from models import train_and_Test_SVC
+from models import train_and_Test
 
-def try_Dataset(dataset, descriptors_dir, video_dir, params, tam_test, verbose = True, is_video_classification = False, C_vals = (5,10,25), bin_vals = (16,32)):
+def try_Dataset(dataset, descriptors_dir, video_dir, params_extraction, params_training, tam_test, verbose = 2, is_video_classification = False):
+    if verbose:
+        verbose -= 1
     
     gt = get_Ground_Truth("Datasets/"+dataset+"/ground_truth.txt")
 
     start = time.time()
-    extract_Descriptors_Dir(params, video_dir, descriptors_dir,gt, verbose, is_video_classification, skip_extraction)
+    extract_Descriptors_Dir(params_extraction, video_dir, descriptors_dir,gt, verbose, is_video_classification, skip_extraction)
     if verbose:
         print(time.time()-start)
 
     names = [name[:-5] for name in glob.glob(descriptors_dir+"*.data")]
 
-    best_acc = 0
-    best_auc = 0
-    best_C = 0.1
     n_folds = ceil(len(names)/tam_test)
-    for n_bins in bin_vals:
-        for C in C_vals:
-            average_acc = 0
-            average_auc = 0
-            for i in range(n_folds):
-                start = time.time()
-                test = names[i*tam_test:i*tam_test+tam_test]
-                training = names[:i*tam_test]+names[i*tam_test+tam_test:]
-
-                prediction, labels = train_and_Test_SVC(training, test, C, is_video_classification, n_bins)
+    n_pruebas = reduce(mul, [len(params_training[x]) for x in params_training], 1)
     
-                acc = accuracy_score(labels,prediction)
-                try:
-                    auc = roc_auc_score(labels,prediction)
-                except:
-                    auc = 0
-                    print(confusion_matrix(labels,prediction))
-
-                if verbose:
-                    print("Nombre: {}".format(names[i]))
-                    print("Acertados: ",sum(1 for i in range(len(prediction)) if prediction[i] == labels[i]),"-",len(prediction))
-                    print("Positivos: {} - {}".format(
-                    sum(1 for i in range(len(prediction)) if prediction[i] == labels[i] and prediction[i] == -1), labels.count(-1)))
-                    print("Accuracy: {:1.3f}".format(acc))
-                    print("AUC: {:1.3f}\n".format(auc))
-
-                average_acc += acc
-                average_auc += auc
-
-            average_acc /= n_folds
-            average_auc /= n_folds
-
-            if verbose:
-                print("C: {}\tNº bins: {}".format(C,n_bins))
-                print("Accuracy: {:1.3f}".format(average_acc))
-                print("AUC: {:1.3f}\n".format(average_auc))
-
-            if average_auc > best_auc:
-                best_acc = average_acc
-                best_auc = average_auc
-                best_C = C
-                best_n_bins = n_bins
-
-    return best_acc, best_auc, best_C, best_n_bins
-
-def try_Multiclass(dataset, descriptors_dir, video_dir, params, number_of_tests, verbose = True, C_vals = (5,10,25), bins_vals = (16,32), remove_same_scenes = True):
+    bins_vals = params_training["bins"]
+    params_training.pop("bins",None)
     
-    classes = get_Classes("Datasets/"+dataset+"/ground_truth.txt")
-    gt = get_Ground_Truth("Datasets/"+dataset+"/ground_truth.txt")
-    
-    if remove_same_scenes:
-        scenes = get_Ground_Truth("Datasets/"+dataset+"/scenes.txt")
+    average_acc = np.zeros(n_pruebas)
+    average_auc = np.zeros(n_pruebas)
+    for i in range(n_folds):
+        start = time.time()
+        test = names[i*tam_test:i*tam_test+tam_test]
+        training = names[:i*tam_test]+names[i*tam_test+tam_test:]
 
-    extract_Descriptors_Dir(params, video_dir, descriptors_dir,gt, verbose, True, skip_extraction)
-
-    best_acc = 0
-    best_mat = None
-
-    for n_bins in bins_vals:
-        for C in C_vals:
-            start = time.time()
-            acc = 0
-            conf_mat = np.zeros((len(classes),len(classes)))
-            for n in range(number_of_tests):
+        acc, auc, list_params = train_and_Test(training, test, is_video_classification, params_training, bins_vals)
+        
+        if verbose:
+            #print("ACC:",tuple(zip(list_params,acc)))
+            print("Time:",time.time()-start)
+            if verbose > 1:
+                for j in range(len(acc)):
+                    print("ACC: {:1.2f} - AUC: {:1.2f} - {}".format(acc[j], auc[j], list_params[j]))
+            best = np.argmax(auc)
+            print("Best:\nParams: {}\n ACC: {:1.3f}\t AUC: {:1.3f}".format(list_params[best],acc[best], auc[best] ))
+            print("Max Accuracy: {:1.3f}".format(max(acc)))
+            print("Max AUC: {:1.3f}\n".format(max(auc)))
             
-                test = np.empty(len(classes),dtype = object)
-                training = []
-            
-                for k, i in enumerate(classes):
-                
-                    indice_test = np.random.randint(len(classes[i]))
-                
-                    test[k] = classes[i][indice_test]
-                    tr = classes[i][:indice_test]+classes[i][indice_test+1:]
-                
-                    if remove_same_scenes:
-                        for j in range(len(tr)-1,0,-1):
-                            if scenes[tr[j]] == scenes[test[k]]:
-                                del tr[j]
+        average_acc = average_acc + np.array(acc)
+        average_auc = average_auc + np.array(auc)
 
-                    training += tr
+    average_acc /= n_folds
+    average_auc /= n_folds
 
-                test = [descriptors_dir+t for t in test]
-                training = [descriptors_dir+t for t in training]
+    best = np.argmax(average_auc)
+    final_acc = average_acc[best]
+    final_auc = average_auc[best]
+    final_params = list_params[best]
 
-                prediction, labels = train_and_Test_SVC(training, test, C, True, n_bins)
+    return final_acc, final_auc, final_params
 
-                acc += accuracy_score(labels,prediction)
-                try:
-                    conf_mat += confusion_matrix(labels,prediction)
-                except:
-                    pass
-
-                if verbose:
-                    print("{}. Accuracy: {:1.3f}".format(n,acc/(n+1)))
-                    print("Average Time: {:1.3f}".format((time.time()-start)/(n+1)))
-
-            acc /= number_of_tests
-            conf_mat /= number_of_tests
-
-            if verbose:
-                print("Total Validation Time: {:1.3f}".format(time.time()-start))
-                print("C: {}\tNº bins: {}".format(C,n_bins))
-                print("Accuracy: {:1.3f}".format(acc))
-                print(conf_mat)
-
-            if acc > best_acc:
-                best_acc = acc
-                best_mat = conf_mat
-                best_C = C
-                best_bins = n_bins
-
-    return best_acc,best_mat,best_C, best_bins
-
-def try_UMN(escena, params, verbose = True):
+def try_UMN(escena, params_extraction, params_training, verbose = 2):
     descriptors_dir = "Descriptors/UMN/Escena "+str(escena)+"/"
     video_dir = "Datasets/UMN/Escenas Completas/Escena "+str(escena)+"/"
 
-    params["num_frames"] = -1
-
-    acc, auc, C, n_bins = try_Dataset("UMN", descriptors_dir, video_dir, params, 1, verbose)
+    acc, auc, best_params = try_Dataset("UMN", descriptors_dir, video_dir, params_extraction,params_training, 1, verbose)
 
     if verbose:
         print("RESULTADOS:")
-        print("C: {}\tNº bins: {}".format(C,n_bins))
+        print(best_params)
         print("Accuracy: {:1.3f}".format(acc))
         print("AUC: {:1.3f}".format(auc))
 
-    return acc, auc, C, n_bins
+    return acc, auc, best_params
 
-def try_CVD(params, verbose = True):
+def try_CVD(params_extraction,params_training, verbose = 2):
     descriptors_dir = "Descriptors/CVD/"
     video_dir = "Datasets/Crowd Violence Detection/"
 
     #params["use_sift"] = 2000
 
-    #acc, auc, C, n_bins = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir, params, 50, verbose, is_video_classification = True, C_vals = (1,5,10,25))
-    acc, auc, C, n_bins = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir, params, 50, verbose, is_video_classification = True, C_vals = [1], bin_vals = (16,32,64))
+    acc, auc, best_params = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir, params_extraction, params_training, 50, verbose, is_video_classification = True)
 
     if verbose:
         print("RESULTADOS:")
-        print("C: {}\tNº bins: {}".format(C,n_bins))
+        print(best_params)
         print("Accuracy: {:1.3f}".format(acc))
         print("AUC: {:1.3f}".format(auc))
     
-    return acc, auc, C, n_bins
+    return acc, auc, best_params
 
-def try_CUHK(params, verbose = True):
-    descriptors_dir = "Descriptors/CUHK/"
-    video_dir = "Datasets/CUHK/Videos/"
+# def try_CUHK(params, verbose = 2):
+#     descriptors_dir = "Descriptors/CUHK/"
+#     video_dir = "Datasets/CUHK/Videos/"
 
-    #params["others"]["skip_to_middle"] = True
-    params["others"]["skip_frames"] = 1
-    params["others"]["num_frames"] = 1
-    params["others"]["change_resolution"] = 320
+#     #params["others"]["skip_to_middle"] = True
+#     params["others"]["skip_frames"] = 1
+#     params["others"]["num_frames"] = 1
+#     params["others"]["change_resolution"] = 320
 
-    acc, conf_mat, C, n_bins = try_Multiclass("CUHK", descriptors_dir, video_dir, params, 25, verbose, remove_same_scenes = False, C_vals = (8,16,32,64,128))
+#     acc, conf_mat, C, n_bins = try_Multiclass("CUHK", descriptors_dir, video_dir, params, 25, verbose, remove_same_scenes = False, C_vals = (8,16,32,64,128))
 
-    if verbose:
-        print("RESULTADOS:")
-        print("C: {}\tNº bins: {}".format(C,n_bins))
-        print("Accuracy: {:1.3f}".format(acc))
-        print("{}".format(conf_mat)) # row: class   column: prediction
+#     if verbose:
+#         print("RESULTADOS:")
+#         print("C: {}\tNº bins: {}".format(C,n_bins))
+#         print("Accuracy: {:1.3f}".format(acc))
+#         print("{}".format(conf_mat)) # row: class   column: prediction
     
-    return acc, conf_mat, C, n_bins
+#     return acc, conf_mat, C, n_bins
 
 #######################################################################
 
@@ -208,16 +128,17 @@ skip_extraction = True
 #                     results_file.write(str(params)+"\n")
 #                     results_file.flush()
 #                     start = time.time()
-#                     acc, auc, C, n_bins = try_CVD( params, verbose = True)
+#                     acc, auc, C, n_bins = try_CVD( params, verbose = 2)
 #                     results_file.write("Acc: "+str(acc)+" AUC: "+str(auc)+" C: "+str(C)+" Nº bins: "+str(n_bins)+" Time: "+str(time.time()-start)+"\n")
 #                     results_file.flush()
 
 # results_file.close()
 
-params = {"L":15, "t1":-5, "t2":1, "min_motion":0.025, "fast_threshold":20, "others":{}}
-#acc, auc, C, n_bins = try_UMN(1,params, verbose = True)
-acc, auc, C, n_bins = try_CVD( params, verbose = True)
-#acc, conf_mat, C, n_bins = try_CUHK( params, verbose = True)
+params_extraction = {"L":10, "t1":-5, "t2":1, "min_motion":0.025, "fast_threshold":10, "others":{}}
+#params_training = {"C":[8,16,32], "bins":[16,32]}
+params_training = {"bins":[32], "hidden_layer_sizes":[(16,4),(64,8)], "solver":["adam", "lbfgs"],"alpha":[0.001,0.0001]}
+#acc, auc, best_params = try_UMN(2,params_extraction, params_training, verbose = 3)
+acc, auc, best_params = try_CVD(params_extraction, params_training, verbose = 2)
 
 
 ################################ Resultados ################################
@@ -241,6 +162,12 @@ acc, auc, C, n_bins = try_CVD( params, verbose = True)
 # AUC: 0.973
 
 # CVD
-# {"L":10, "t1":-5, "t2":1, "min_motion":0.025, "fast_threshold":20, "others":{}} bins = 32
-# C: 5
-# AUC: 0.834
+# {"L":5, "t1":-5, "t2":1, "min_motion":0.05, "fast_threshold":10, "others":{}} 
+# C: 32, bins = 32
+# AUC: 0.86
+
+# {'n_bins': 32, 'hidden_layer_sizes': (64, 8), 'solver': 'adam', 'alpha': 0.001}
+# Accuracy: 0.875
+# AUC: 0.877
+
+

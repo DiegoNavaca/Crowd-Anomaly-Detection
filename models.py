@@ -1,6 +1,8 @@
 import joblib
 import pickle
 import numpy as np
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import roc_auc_score
 from sklearn.svm import OneClassSVM
 from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
@@ -29,7 +31,7 @@ def get_Range_Descriptors(files, is_video_classification, n_descriptors = 8):
                 if label != -1:
                     for i, d in enumerate(descriptores):
                         # We use percentile to remove the outliers
-                        aux = np.percentile(d,90)
+                        aux = np.percentile(d,95)
                     
                         if aux > maximos[i]:
                             maximos[i] = aux
@@ -120,45 +122,71 @@ def prepare_Hist_and_Labels(files, range_max,range_min, is_video_classification,
 
     return histograms, labels
 
-def train_and_Test_SVC(training, test, C, video_classification, n_bins, eliminar_descriptores = []):
+from itertools import product
+
+def train_and_Test(training, test, video_classification, params_training, bins_vals, eliminar_descriptores = [7]):    
+    acc_list = []
+    auc_list = []
+    params_list = []
+
     range_max, range_min = get_Range_Descriptors(training, video_classification)
 
-    hist, labels = prepare_Hist_and_Labels(training, range_max,range_min, video_classification, n_bins, eliminar_descriptores, eliminar_vacios = True)
+    for n_bins in bins_vals:
+        hist, labels = prepare_Hist_and_Labels(training, range_max,range_min,
+                                               video_classification, n_bins, eliminar_descriptores, eliminar_vacios = True)
+        hist_test, labels_test = prepare_Hist_and_Labels(test, range_max,range_min,
+                                                         video_classification, n_bins, eliminar_descriptores)
 
-    model = train_Network(hist, labels)
+        if "hidden_layer_sizes" in params_training:
+            keys, values = zip(*params_training.items())
+            permutations_dicts = [dict(zip(keys, v)) for v in product(*values)]
+            for params in permutations_dicts:
+                model = train_Network(hist, labels, params)
+
+                prediction = test_model(hist_test, model, video_classification)
+
+                acc_list.append(accuracy_score(labels_test,prediction))
+                params_list.append(dict({"n_bins":n_bins},**params))
+                try:
+                    auc_list.append(roc_auc_score(labels_test,prediction))
+                except:
+                    pass
             
-    hist, labels = prepare_Hist_and_Labels(test, range_max,range_min, video_classification, n_bins, eliminar_descriptores)
-        
-    prediction = test_model(hist, model, video_classification)
+        elif "C" in params_training:
+            for C in params_training["C"]:
+                model = train_SVC(hist,labels,C)
 
-    return prediction, labels
+                prediction = test_model(hist_test, model, video_classification)
 
-def train_OC_SVM(samples, out_file = None, nu = 0.1):
+                acc_list.append(accuracy_score(labels_test,prediction))
+                params_list.append({"n_bins":n_bins,"C":C})
+                try:
+                    auc_list.append(roc_auc_score(labels_test,prediction))
+                except:
+                    pass
+
+    return acc_list, auc_list, params_list
+
+def train_OC_SVM(samples, nu = 0.1, out_file = None):
     svm = OneClassSVM(nu = nu, verbose = False, kernel = "sigmoid").fit(samples)
     if out_file is not None:
         joblib.dump(svm, out_file)
 
     return svm
 
-def train_SVC(samples, labels, out_file = None, C = 10):
+def train_SVC(samples, labels, C = 10, out_file = None):
     svm = SVC(C = C, kernel = "rbf", decision_function_shape = 'ovo', class_weight = 'balanced')
     svm.fit(samples, labels)
     if out_file is not None:
         joblib.dump(svm, out_file)
 
     return svm
+    
 
-def train_Network(samples, labels,out_file = None):
-    model = MLPClassifier(max_iter = 2000)
-    tam = len(samples[0])
-    params = {"hidden_layer_sizes":(tam//2,(tam//2,tam//3),(tam//2,tam//3,tam//4)), "solver":("adam","lbfgs")
-              , "alpha": (0.0001,0.001,0.01)}
+def train_Network(samples, labels, params, out_file = None):
+    model = MLPClassifier(max_iter = 2000, **params)
 
-    gs = GridSearchCV(model, params, cv = 10, n_jobs = -1, scoring = "balanced_accuracy")
-
-    gs.fit(samples,labels)
-    print(gs.best_params_, gs.best_score_)
-    model = gs.best_estimator_
+    model.fit(samples,labels)
 
     if out_file is not None:
         joblib.dump(model, out_file)
