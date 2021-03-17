@@ -124,7 +124,7 @@ def prepare_Hist_and_Labels(files, range_max,range_min, is_video_classification,
 
 from itertools import product
 
-def train_and_Test(training, test, video_classification, params_training, bins_vals, eliminar_descriptores = [7]):    
+def train_and_Test(training, test, video_classification, params_training, bins_vals, verbose = 0, eliminar_descriptores = []):    
     acc_list = []
     auc_list = []
     params_list = []
@@ -145,12 +145,19 @@ def train_and_Test(training, test, video_classification, params_training, bins_v
 
                 prediction = test_model(hist_test, model, video_classification)
 
-                acc_list.append(accuracy_score(labels_test,prediction))
+                acc = accuracy_score(labels_test,prediction)
+                
                 params_list.append(dict({"n_bins":n_bins},**params))
                 try:
-                    auc_list.append(roc_auc_score(labels_test,prediction))
+                    auc = roc_auc_score(labels_test,prediction)
                 except:
-                    pass
+                    auc = 0
+
+                acc_list.append(acc)
+                auc_list.append(auc)
+                    
+                if verbose > 0:
+                    print("ACC: {:1.2f} - AUC: {:1.2f} - {}".format(acc, auc, params))
             
         elif "C" in params_training:
             for C in params_training["C"]:
@@ -158,12 +165,19 @@ def train_and_Test(training, test, video_classification, params_training, bins_v
 
                 prediction = test_model(hist_test, model, video_classification)
 
-                acc_list.append(accuracy_score(labels_test,prediction))
-                params_list.append({"n_bins":n_bins,"C":C})
+                acc = accuracy_score(labels_test,prediction)
+                
+                params_list.append(dict({"n_bins":n_bins},**params))
                 try:
-                    auc_list.append(roc_auc_score(labels_test,prediction))
+                    auc = roc_auc_score(labels_test,prediction)
                 except:
-                    pass
+                    auc = 0
+
+                acc_list.append(acc)
+                auc_list.append(auc)
+                    
+                if verbose > 0:
+                    print("ACC: {:1.2f} - AUC: {:1.2f} - {}".format(acc, auc, params))
 
     return acc_list, auc_list, params_list
 

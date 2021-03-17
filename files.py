@@ -9,8 +9,6 @@ from descriptors import extract_descriptors
 
 # Extracts the descriptors of all files in a directory and saves them in separate files
 def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = 1, video_classification = False, skip_extraction = False):
-    if verbose:
-        verbose -= 1
     # The descriptors are stored in a .data file in the output directory
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -55,12 +53,9 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = 1, vide
             labels_file.close()
 
         except AssertionError:
-            if verbose:
+            if verbose and not skip_extraction:
                 print("{} is not a video".format(video))
 
-    if verbose:
-        print("Tiempo de extraccion total: {:1.3f}".format(time.time()-start))
-        
         
 # Reads the ground truth from a file
 def get_Ground_Truth(in_file):

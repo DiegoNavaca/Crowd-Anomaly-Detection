@@ -13,15 +13,13 @@ from files import get_Classes
 from models import train_and_Test
 
 def try_Dataset(dataset, descriptors_dir, video_dir, params_extraction, params_training, tam_test, verbose = 2, is_video_classification = False):
-    if verbose:
-        verbose -= 1
     
     gt = get_Ground_Truth("Datasets/"+dataset+"/ground_truth.txt")
 
     start = time.time()
     extract_Descriptors_Dir(params_extraction, video_dir, descriptors_dir,gt, verbose, is_video_classification, skip_extraction)
-    if verbose:
-        print(time.time()-start)
+    if verbose > 0 and not skip_extraction:
+        print("Tiempo de extraccion total: {:1.3f}".format(time.time()-start))
 
     names = [name[:-5] for name in glob.glob(descriptors_dir+"*.data")]
 
@@ -38,14 +36,11 @@ def try_Dataset(dataset, descriptors_dir, video_dir, params_extraction, params_t
         test = names[i*tam_test:i*tam_test+tam_test]
         training = names[:i*tam_test]+names[i*tam_test+tam_test:]
 
-        acc, auc, list_params = train_and_Test(training, test, is_video_classification, params_training, bins_vals)
+        acc, auc, list_params = train_and_Test(training, test, is_video_classification,
+                                               params_training, bins_vals, verbose = verbose-1)
         
-        if verbose:
-            #print("ACC:",tuple(zip(list_params,acc)))
+        if verbose > 0:
             print("Time:",time.time()-start)
-            if verbose > 1:
-                for j in range(len(acc)):
-                    print("ACC: {:1.2f} - AUC: {:1.2f} - {}".format(acc[j], auc[j], list_params[j]))
             best = np.argmax(auc)
             print("Best:\nParams: {}\n ACC: {:1.3f}\t AUC: {:1.3f}".format(list_params[best],acc[best], auc[best] ))
             print("Max Accuracy: {:1.3f}".format(max(acc)))
@@ -68,9 +63,10 @@ def try_UMN(escena, params_extraction, params_training, verbose = 2):
     descriptors_dir = "Descriptors/UMN/Escena "+str(escena)+"/"
     video_dir = "Datasets/UMN/Escenas Completas/Escena "+str(escena)+"/"
 
-    acc, auc, best_params = try_Dataset("UMN", descriptors_dir, video_dir, params_extraction,params_training, 1, verbose)
+    acc, auc, best_params = try_Dataset("UMN", descriptors_dir, video_dir, params_extraction,
+                                        params_training, 1, verbose-1)
 
-    if verbose:
+    if verbose > 0:
         print("RESULTADOS:")
         print(best_params)
         print("Accuracy: {:1.3f}".format(acc))
@@ -84,9 +80,10 @@ def try_CVD(params_extraction,params_training, verbose = 2):
 
     #params["use_sift"] = 2000
 
-    acc, auc, best_params = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir, params_extraction, params_training, 50, verbose, is_video_classification = True)
+    acc, auc, best_params = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir, params_extraction,
+                                        params_training, 50, verbose-1, is_video_classification = True)
 
-    if verbose:
+    if verbose > 0:
         print("RESULTADOS:")
         print(best_params)
         print("Accuracy: {:1.3f}".format(acc))
@@ -105,7 +102,7 @@ def try_CVD(params_extraction,params_training, verbose = 2):
 
 #     acc, conf_mat, C, n_bins = try_Multiclass("CUHK", descriptors_dir, video_dir, params, 25, verbose, remove_same_scenes = False, C_vals = (8,16,32,64,128))
 
-#     if verbose:
+#     if verbose > 0
 #         print("RESULTADOS:")
 #         print("C: {}\tNº bins: {}".format(C,n_bins))
 #         print("Accuracy: {:1.3f}".format(acc))
@@ -136,9 +133,10 @@ skip_extraction = True
 
 params_extraction = {"L":10, "t1":-5, "t2":1, "min_motion":0.025, "fast_threshold":10, "others":{}}
 #params_training = {"C":[8,16,32], "bins":[16,32]}
-params_training = {"bins":[32], "hidden_layer_sizes":[(16,4),(64,8)], "solver":["adam", "lbfgs"],"alpha":[0.001,0.0001]}
+params_training = {"bins":[16,32,64], "hidden_layer_sizes":[(64,8),(128,64,8)],
+                   "solver":["adam"],"alpha":[0.001,0.0001]}
 #acc, auc, best_params = try_UMN(2,params_extraction, params_training, verbose = 3)
-acc, auc, best_params = try_CVD(params_extraction, params_training, verbose = 2)
+acc, auc, best_params = try_CVD(params_extraction, params_training, verbose = 3)
 
 
 ################################ Resultados ################################
@@ -150,10 +148,14 @@ acc, auc, best_params = try_CVD(params_extraction, params_training, verbose = 2)
 # AUC: 0.990
 
 # Escena 2
-# {'L': 10, 't1': -5, 't2': 1, 'min_motion': 0.025, 'fast_threshold': 20}
-# nu: 0.1
-# Accuracy: 0.955
-# AUC: 0.925
+# {"L":10, "t1":-5, "t2":1, "min_motion":0.025, "fast_threshold":10, "others":{}}
+# {'n_bins': 64, 'C': 64}
+# Accuracy: 0.954
+# AUC: 0.927
+
+# {'n_bins': 64, 'hidden_layer_sizes': (128, 32, 4), 'solver': 'adam', 'alpha': 0.0001}
+# Accuracy: 0.959
+# AUC: 0.935
 
 # Escena 3
 # {'L': 20, 't1': -3, 't2': 2, 'min_motion': 0.05, 'fast_threshold': 20}
