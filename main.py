@@ -13,6 +13,7 @@ from files import get_Classes
 from models import train_and_Test
 
 def try_Dataset(dataset, descriptors_dir, video_dir, params_extraction, params_training, tam_test, verbose = 2, is_video_classification = False):
+    np.random.seed(5)
     
     gt = get_Ground_Truth("Datasets/"+dataset+"/ground_truth.txt")
 
@@ -22,6 +23,7 @@ def try_Dataset(dataset, descriptors_dir, video_dir, params_extraction, params_t
         print("Tiempo de extraccion total: {:1.3f}".format(time.time()-start))
 
     names = [name[:-5] for name in glob.glob(descriptors_dir+"*.data")]
+    np.random.shuffle(names, )
 
     n_folds = ceil(len(names)/tam_test)
     n_pruebas = reduce(mul, [len(params_training[x]) for x in params_training], 1)
@@ -58,6 +60,8 @@ def try_Dataset(dataset, descriptors_dir, video_dir, params_extraction, params_t
     final_params = list_params[best]
 
     return final_acc, final_auc, final_params
+
+#######################################################################
 
 def try_UMN(escena, params_extraction, params_training, verbose = 2):
     descriptors_dir = "Descriptors/UMN/Escena "+str(escena)+"/"
@@ -112,31 +116,32 @@ def try_CVD(params_extraction,params_training, verbose = 2):
 
 #######################################################################
 
-skip_extraction = True
-
-# results_file = open("results.txt","w")
-
-# for L in [5,10]:
-#     for t1 in [-3,-5]:
-#         for t2 in [1,2]:
-#             for min_motion in [0.025,0.05]:
-#                 for fast_threshold in [10,20]:
-#                     params = {"L":L, "t1":t1, "t2":t2, "min_motion":min_motion, "fast_threshold":fast_threshold, "others":{}}
-#                     results_file.write(str(params)+"\n")
-#                     results_file.flush()
-#                     start = time.time()
-#                     acc, auc, C, n_bins = try_CVD( params, verbose = 2)
-#                     results_file.write("Acc: "+str(acc)+" AUC: "+str(auc)+" C: "+str(C)+" Nº bins: "+str(n_bins)+" Time: "+str(time.time()-start)+"\n")
-#                     results_file.flush()
-
-# results_file.close()
+skip_extraction = False
 
 params_extraction = {"L":10, "t1":-5, "t2":1, "min_motion":0.025, "fast_threshold":10, "others":{}}
-#params_training = {"C":[8,16,32], "bins":[16,32]}
-params_training = {"bins":[16,32,64], "hidden_layer_sizes":[(64,8),(128,64,8)],
-                   "solver":["adam"],"alpha":[0.001,0.0001]}
-#acc, auc, best_params = try_UMN(2,params_extraction, params_training, verbose = 3)
-acc, auc, best_params = try_CVD(params_extraction, params_training, verbose = 3)
+params_training = {"C":[4,8,16,32,64,128], "bins":[32,64,128,256]}
+
+results_file = open("results.txt","w")
+
+for L in [5,10,15,20]:
+    for t1 in [-3,-5]:
+        for t2 in [1,2]:
+            for min_motion in [0.01,0.025,0.05]:
+                for fast_threshold in [10,20]:
+                    params_extraction = {"L":L, "t1":t1, "t2":t2, "min_motion":min_motion, "fast_threshold":fast_threshold, "others":{}}
+                    results_file.write(str(params_extraction)+"\n")
+                    results_file.flush()
+                    start = time.time()
+                    acc, auc, best_params = try_UMN(2,params_extraction, params_training, verbose = 2)
+                    results_file.write("Acc: "+str(acc)+" AUC: "+str(auc)+" Params"+best_params+" Time: "+str(time.time()-start)+"\n")
+                    results_file.flush()
+
+results_file.close()
+
+#params_training = {"bins":[16,32,64], "hidden_layer_sizes":[(64,8),(16,4)],
+#                   "solver":["adam"],"alpha":[0.01,0.001,0.0001]}
+
+#acc, auc, best_params = try_CVD(params_extraction, params_training, verbose = 3)
 
 
 ################################ Resultados ################################
