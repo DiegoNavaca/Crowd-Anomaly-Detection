@@ -119,7 +119,6 @@ def try_CVD(params_extraction,params_training, verbose = 2):
 skip_extraction = False
 
 params_extraction = {"L":10, "t1":-5, "t2":1, "min_motion":0.025, "fast_threshold":10, "others":{}}
-params_training = {"C":[4,8,16,32,64,128], "bins":[32,64,128,256]}
 
 results_file = open("results.txt","w")
 
@@ -128,12 +127,13 @@ for L in [5,10,15,20]:
         for t2 in [1,2]:
             for min_motion in [0.01,0.025,0.05]:
                 for fast_threshold in [10,20]:
+                    params_training = {"C":[4,8,16,32,64,128], "bins":[32,64,128,256]}
                     params_extraction = {"L":L, "t1":t1, "t2":t2, "min_motion":min_motion, "fast_threshold":fast_threshold, "others":{}}
                     results_file.write(str(params_extraction)+"\n")
                     results_file.flush()
                     start = time.time()
                     acc, auc, best_params = try_UMN(2,params_extraction, params_training, verbose = 2)
-                    results_file.write("Acc: "+str(acc)+" AUC: "+str(auc)+" Params"+best_params+" Time: "+str(time.time()-start)+"\n")
+                    results_file.write("Acc: "+str(acc)+" AUC: "+str(auc)+" Params"+str(best_params)+" Time: "+str(time.time()-start)+"\n")
                     results_file.flush()
 
 results_file.close()
