@@ -12,7 +12,7 @@ from files import get_Ground_Truth
 from files import get_Classes
 from models import train_and_Test
 
-def try_Dataset(dataset, descriptors_dir, video_dir, params_extraction, params_training, tam_test, verbose = 2, is_video_classification = False):
+def try_Dataset(dataset, descriptors_dir, video_dir, encoder_dir, params_extraction, params_training, tam_test, verbose = 2, is_video_classification = False):
     np.random.seed(5)
     
     gt = get_Ground_Truth("Datasets/"+dataset+"/ground_truth.txt")
@@ -39,7 +39,7 @@ def try_Dataset(dataset, descriptors_dir, video_dir, params_extraction, params_t
         training = names[:i*tam_test]+names[i*tam_test+tam_test:]
 
         acc, auc, list_params = train_and_Test(training, test, is_video_classification,
-                                               params_training, bins_vals, verbose = verbose-1)
+                                               params_training, bins_vals,encoder_dir, verbose = verbose-1)
         
         if verbose > 0:
             print("Time:",time.time()-start)
@@ -66,8 +66,9 @@ def try_Dataset(dataset, descriptors_dir, video_dir, params_extraction, params_t
 def try_UMN(escena, params_extraction, params_training, verbose = 2):
     descriptors_dir = "Descriptors/UMN/Escena "+str(escena)+"/"
     video_dir = "Datasets/UMN/Escenas Completas/Escena "+str(escena)+"/"
+    encoder_dir = "Encoders/UMN/Escena "+str(escena)+"/"
 
-    acc, auc, best_params = try_Dataset("UMN", descriptors_dir, video_dir, params_extraction,
+    acc, auc, best_params = try_Dataset("UMN", descriptors_dir, video_dir,encoder_dir, params_extraction,
                                         params_training, 1, verbose-1)
 
     if verbose > 0:
@@ -81,11 +82,11 @@ def try_UMN(escena, params_extraction, params_training, verbose = 2):
 def try_CVD(params_extraction,params_training, verbose = 2):
     descriptors_dir = "Descriptors/CVD/"
     video_dir = "Datasets/Crowd Violence Detection/"
+    encoder_dir = "Encoders/CVD/"
 
     #params["use_sift"] = 2000
 
-    acc, auc, best_params = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir, params_extraction,
-                                        params_training, 50, verbose-1, is_video_classification = True)
+    acc, auc, best_params = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir,encoder_dir, params_extraction,params_training, 50, verbose-1, is_video_classification = True)
 
     if verbose > 0:
         print("RESULTADOS:")
@@ -116,32 +117,34 @@ def try_CVD(params_extraction,params_training, verbose = 2):
 
 #######################################################################
 
-skip_extraction = False
+skip_extraction = True
 
 params_extraction = {"L":10, "t1":-5, "t2":1, "min_motion":0.025, "fast_threshold":10, "others":{}}
+params_training = {"C":[4,8,16,32,64,128], "bins":[64,128,256]}
 
-results_file = open("results.txt","w")
+# results_file = open("results.txt","w")
 
-for L in [5,10,15,20]:
-    for t1 in [-3,-5]:
-        for t2 in [1,2]:
-            for min_motion in [0.01,0.025,0.05]:
-                for fast_threshold in [10,20]:
-                    params_training = {"C":[4,8,16,32,64,128], "bins":[32,64,128,256]}
-                    params_extraction = {"L":L, "t1":t1, "t2":t2, "min_motion":min_motion, "fast_threshold":fast_threshold, "others":{}}
-                    results_file.write(str(params_extraction)+"\n")
-                    results_file.flush()
-                    start = time.time()
-                    acc, auc, best_params = try_UMN(2,params_extraction, params_training, verbose = 2)
-                    results_file.write("Acc: "+str(acc)+" AUC: "+str(auc)+" Params"+str(best_params)+" Time: "+str(time.time()-start)+"\n")
-                    results_file.flush()
+# for L in [5,10,15,20]:
+#     for t1 in [-3,-5]:
+#         for t2 in [1,2]:
+#             for min_motion in [0.01,0.025,0.05]:
+#                 for fast_threshold in [10,20]:
+#                     params_training = {"C":[4,8,16,32,64,128], "bins":[32,64,128,256]}
+#                     params_extraction = {"L":L, "t1":t1, "t2":t2, "min_motion":min_motion, "fast_threshold":fast_threshold, "others":{}}
+#                     results_file.write(str(params_extraction)+"\n")
+#                     results_file.flush()
+#                     start = time.time()
+#                     acc, auc, best_params = try_UMN(2,params_extraction, params_training, verbose = 2)
+#                     results_file.write("Acc: "+str(acc)+" AUC: "+str(auc)+" Params"+str(best_params)+" Time: "+str(time.time()-start)+"\n")
+#                     results_file.flush()
 
-results_file.close()
+# results_file.close()
 
 #params_training = {"bins":[16,32,64], "hidden_layer_sizes":[(64,8),(16,4)],
 #                   "solver":["adam"],"alpha":[0.01,0.001,0.0001]}
 
-#acc, auc, best_params = try_CVD(params_extraction, params_training, verbose = 3)
+#acc, auc, best_params = try_UMN(1,params_extraction, params_training, verbose = 2)
+acc, auc, best_params = try_CVD(params_extraction, params_training, verbose = 3)
 
 
 ################################ Resultados ################################
