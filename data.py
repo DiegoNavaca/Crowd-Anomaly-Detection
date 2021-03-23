@@ -14,14 +14,14 @@ def get_Range_Descriptors(files, is_video_classification, n_descriptors = 8):
         while True:
             try:
                 descriptores = pickle.load(f)
-
-                try:
-                    if is_video_classification:
-                        label = labels[0]
-                    else:
+                
+                if is_video_classification:
+                    label = labels[0]
+                else:
+                    try:
                         label = labels[k]
-                except IndexError:
-                    label = 0
+                    except IndexError:
+                        label = labels[0]
 
                 # Anomaly values aren't taken into account
                 if label != -1:
@@ -105,6 +105,9 @@ def prepare_Hist_and_Labels(files, range_max,range_min, is_video_classification,
         else:
             h, vacios = get_Histograms(f, range_max, range_min, n_bins, eliminar_descriptores)
             lab = read_Labels(f+".labels")
+
+            if len(h) > len(lab):
+                lab = lab*(len(h)//len(lab))
 
             if eliminar_vacios:
                 for it in range(len(vacios)-1,0,-1):

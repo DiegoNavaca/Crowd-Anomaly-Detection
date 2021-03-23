@@ -4,6 +4,7 @@ import numpy as np
 import keras
 
 from keras.layers import Dense
+from keras.layers import Dropout
 from keras.models import Model
 from sklearn.model_selection import KFold
 
@@ -12,13 +13,18 @@ from data import get_Range_Descriptors
 
 class Autoencoder(Model):
     def __init__(self, input_size, latent_dim):
-        super(Autoencoder, self).__init__()
+        act = 'relu'
+        super().__init__()
         self.latent_dim = latent_dim
         self.encoder = keras.Sequential([
-            Dense(input_size // 2, activation='relu'),
-            Dense(latent_dim, activation='relu'),
+            Dense(input_size // 2, activation=act),
+            Dense(input_size // 4, activation=act),
+            Dropout(1/(latent_dim+1)),
+            Dense(latent_dim, activation=act),
         ])
         self.decoder = keras.Sequential([
+            Dense(input_size // 4, activation=act),
+            Dense(input_size // 2, activation=act),
             Dense(input_size, activation='sigmoid'),
         ])
 
@@ -27,22 +33,8 @@ class Autoencoder(Model):
         decoded = self.decoder(encoded)
         return decoded
 
-def build_model(input_size = 1024):
-    hidden_size = input_size // 2
-    code_size = 8
-    input_img = keras.models.Input(shape=(input_size,))
-    hidden_1 = Dense(hidden_size, activation='relu')(input_img)
-    code = Dense(code_size, activation='relu')(hidden_1)
-    #ar = keras.regularizers.l1(10e-5)(input_img)
-    hidden_2 = Dense(hidden_size, activation='relu')(code)
-    output_img = Dense(input_size, activation='sigmoid')(hidden_2)
-    autoencoder = keras.models.Model(input_img, output_img)
-    
-    autoencoder.compile(optimizer='adam', loss='mean_squared_error')#'binary_crossentropy')
 
-    return autoencoder
-
-def train_encoder(x_train, model, params, verbose = 0):
+def cross_validate_encoder(x_train, model, params, verbose = 0):
     result = 0
     n_folds = 5
     for train_index, test_index in KFold(n_folds).split(X = x_train):
@@ -54,7 +46,7 @@ def train_encoder(x_train, model, params, verbose = 0):
     
     return result
     
-def prepare_encoder(descriptors_dir, bin_vals, params, eliminar_descriptores = [], verbose = 1):
+def prepare_encoder(descriptors_dir, bin_vals, params, loss, is_video_classification, eliminar_descriptores = [], exclude_anomalies = False, verbose = 1):
     output_dir = "Encoders/"+descriptors_dir.split('/', 1)[1]
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -62,25 +54,64 @@ def prepare_encoder(descriptors_dir, bin_vals, params, eliminar_descriptores = [
     for n_bins in bin_vals:
         names = [name[:-5] for name in glob.glob(descriptors_dir+"*.data")]
         
-        range_max, range_min = get_Range_Descriptors(names, is_video_classification = False)
+        range_max, range_min = get_Range_Descriptors(names, is_video_classification)
         
-        hist, _ = prepare_Hist_and_Labels(names,range_max, range_min, False, n_bins,
-                                      eliminar_descriptores, eliminar_vacios = False)
+        hist, labels = prepare_Hist_and_Labels(names,range_max, range_min, is_video_classification, n_bins, eliminar_descriptores, eliminar_vacios = False)
+
+        print(len(hist),len(labels))
+        if exclude_anomalies:
+            hist = [hist[i] for i in range(len(hist)) if labels[i] != -1]
 
         hist = np.array(hist)
     
-        model = Autoencoder(len(hist[0]),8)
-        model.compile(optimizer='adam', loss='mean_squared_error')
-    
-        result = train_encoder(hist, model, params, verbose = verbose-1)
-
-        if verbose > 0:
-            print("\nValidation loss: {}".format(result))
+        model = Autoencoder(len(hist[0]),params.pop("code_size"))
+        model.compile(optimizer='adam', loss=loss)
         
         model.fit(hist,hist, verbose = verbose ,**params)
             
         model.encoder.save(output_dir+"encoder"+str(n_bins)+".h5")
 
-params = {"epochs":3}
-#prepare_encoder("Descriptors/UMN/Escena 1/",[64,128,256], params)
-prepare_encoder("Descriptors/CVD/",[64,128,256], params)
+########################################################################################
+        
+import matplotlib.pyplot as plt
+from keras.models import load_model
+def visualice_data(descriptors_dir,n_bins, is_video_classification):
+    names = [name[:-5] for name in glob.glob(descriptors_dir+"*.data")]
+        
+    range_max, range_min = get_Range_Descriptors(names, is_video_classification)
+        
+    hist, labels = prepare_Hist_and_Labels(names,range_max, range_min, is_video_classification, n_bins, [], eliminar_vacios = True)
+
+    encoder_dir = "Encoders/"+descriptors_dir.split("/",1)[1]
+    encoder_file = encoder_dir+"encoder"+str(n_bins)+".h5"
+    encoder = load_model(encoder_file, compile=False)
+    hist = encoder.predict(np.array(hist))
+
+    if len(hist[0]) > 2:
+        ax = plt.axes(projection ="3d")
+    for label in [-1,1]:
+        x = [hist[i][0] for i in range(len(hist)) if labels[i] == label]
+        y = [hist[i][1] for i in range(len(hist)) if labels[i] == label]
+        if len(hist[0]) > 2:
+            z = [hist[i][2] for i in range(len(hist)) if labels[i] == label]
+            ax.scatter3D (x,y,z, label = label)
+        else:
+            plt.scatter(x,y, label = label)
+    plt.legend()
+    plt.show()
+
+########################################################################################
+
+params = {"code_size":16,"epochs":25}
+loss = 'mean_squared_error'
+bin_vals = [64]
+#descriptors_dir = "Descriptors/UMN/Escena 1/"
+descriptors_dir = "Descriptors/CVD/"
+if params["code_size"] < 4:
+    prepare_encoder(descriptors_dir,bin_vals, params, loss,
+                False, exclude_anomalies = False)
+else:
+    prepare_encoder(descriptors_dir,bin_vals, params, loss,
+                False, exclude_anomalies = False)
+    for b in bin_vals:
+        visualice_data(descriptors_dir,b, True)

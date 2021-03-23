@@ -9,7 +9,7 @@ from functools import reduce
 
 from files import extract_Descriptors_Dir
 from files import get_Ground_Truth
-from files import get_Classes
+#from files import get_Classes
 from models import train_and_Test
 
 def try_Dataset(dataset, descriptors_dir, video_dir, encoder_dir, params_extraction, params_training, tam_test, verbose = 2, is_video_classification = False):
@@ -23,7 +23,15 @@ def try_Dataset(dataset, descriptors_dir, video_dir, encoder_dir, params_extract
         print("Tiempo de extraccion total: {:1.3f}".format(time.time()-start))
 
     names = [name[:-5] for name in glob.glob(descriptors_dir+"*.data")]
-    np.random.shuffle(names, )
+    if "OC" in params_training:
+        if is_video_classification:
+            normal_videos = [name for name in names if gt[name.split("/")[-1]] == 1]
+            anomalies = [name for name in names if gt[name.split("/")[-1]] == -1]
+        else:
+            print("Funcionalidad no implementada")
+            return 0,0,{}
+    else:
+        np.random.shuffle(names)
 
     n_folds = ceil(len(names)/tam_test)
     n_pruebas = reduce(mul, [len(params_training[x]) for x in params_training], 1)
@@ -35,11 +43,15 @@ def try_Dataset(dataset, descriptors_dir, video_dir, encoder_dir, params_extract
     average_auc = np.zeros(n_pruebas)
     for i in range(n_folds):
         start = time.time()
-        test = names[i*tam_test:i*tam_test+tam_test]
-        training = names[:i*tam_test]+names[i*tam_test+tam_test:]
+        if "OC" in params_training:
+            np.random.shuffle(normal_videos)
+            training = normal_videos[:(len(normal_videos)//2)+1]
+            test = anomalies + normal_videos[(len(normal_videos)//2)+1:]
+        else:
+            test = names[i*tam_test:i*tam_test+tam_test]
+            training = names[:i*tam_test]+names[i*tam_test+tam_test:]
 
-        acc, auc, list_params = train_and_Test(training, test, is_video_classification,
-                                               params_training, bins_vals,encoder_dir, verbose = verbose-1)
+        acc, auc, list_params = train_and_Test(training, test, is_video_classification, params_training, bins_vals,encoder_dir, verbose = verbose-1)
         
         if verbose > 0:
             print("Time:",time.time()-start)
@@ -95,6 +107,8 @@ def try_CVD(params_extraction,params_training, verbose = 2):
         print("AUC: {:1.3f}".format(auc))
     
     return acc, auc, best_params
+    
+######################################################################
 
 # def try_CUHK(params, verbose = 2):
 #     descriptors_dir = "Descriptors/CUHK/"
@@ -120,7 +134,8 @@ def try_CVD(params_extraction,params_training, verbose = 2):
 skip_extraction = True
 
 params_extraction = {"L":10, "t1":-5, "t2":1, "min_motion":0.025, "fast_threshold":10, "others":{}}
-params_training = {"C":[4,8,16,32,64,128], "bins":[64,128,256]}
+params_training = {"C":[1,2,4,8,16,32,64,128], "bins":[64]}
+#params_training = {"nu":[0.2,0.1], "bins":[64], "OC":[True]}
 
 # results_file = open("results.txt","w")
 
