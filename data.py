@@ -117,7 +117,4 @@ def prepare_Hist_and_Labels(files, range_max,range_min, is_video_classification,
             histograms += h
             labels += lab
             
-            
-
-    return histograms, labels
- 
+    return np.array(histograms), np.array(labels)

@@ -7,12 +7,13 @@ from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
 from itertools import product
 from sklearn.decomposition import PCA
-from keras.models import load_model
 
 from data import get_Range_Descriptors
 from data import prepare_Hist_and_Labels
 
-def train_and_Test(training, test, video_classification, params_training, bins_vals, encoder_dir, verbose = 0, eliminar_descriptores = []):    
+from autoencoders import Autoencoder
+
+def train_and_Test(training, test, video_classification, params_training, bins_vals, encoder_vals, verbose = 0, eliminar_descriptores = []):    
     acc_list = []
     auc_list = []
     params_list = []
@@ -20,49 +21,55 @@ def train_and_Test(training, test, video_classification, params_training, bins_v
     range_max, range_min = get_Range_Descriptors(training, video_classification)
 
     for n_bins in bins_vals:
-        hist, labels = prepare_Hist_and_Labels(training, range_max,range_min, video_classification, n_bins, eliminar_descriptores, eliminar_vacios = True)
+        hist_original, labels = prepare_Hist_and_Labels(training, range_max,range_min, video_classification, n_bins, eliminar_descriptores, eliminar_vacios = True)
         
-        hist_test, labels_test = prepare_Hist_and_Labels(test, range_max,range_min,video_classification, n_bins, eliminar_descriptores)
-        
-        try:
-            encoder_file = encoder_dir+"encoder"+str(n_bins)+".h5"
-            encoder = load_model(encoder_file, compile=False)
-            hist = encoder.predict(np.array(hist))
-            hist_test = encoder.predict(np.array(hist_test))
-        except:
-            print("Error al codificar, continuando con PCA 95%")
-            pca = PCA(n_components=0.95)
-            pca.fit(hist)
-            hist = pca.transform(hist)
-            hist_test = pca.transform(hist_test)
+        hist_test_original, labels_test = prepare_Hist_and_Labels(test, range_max,range_min,video_classification, n_bins, eliminar_descriptores)
 
-        keys, values = zip(*params_training.items())
-        permutations = [dict(zip(keys, v)) for v in product(*values)]
+        for code_size in encoder_vals:
+            if code_size is None:
+                hist = hist_original.copy()
+                hist_test = hist_test_original.copy()
+                
+            elif code_size < 1.0:
+                pca = PCA(n_components=code_size)
+                pca.fit(hist_original)
+                hist = pca.transform(hist_original)
+                hist_test = pca.transform(hist_test_original)
+                
+            else:
+                autoencoder = Autoencoder(len(hist_original[0]), code_size)
+                autoencoder.compile(optimizer = 'adam', loss = 'mean_squared_error')
+                autoencoder.fit(hist_original,hist_original,verbose = verbose-1, epochs = 50)
+                hist = autoencoder.encoder.predict(hist_original)
+                hist_test = autoencoder.encoder.predict(hist_test_original)
 
-        for params in permutations:
-            if "C" in params_training:
-                model = train_SVC(hist,labels, params)
-            elif "OC" in params_training:
-                model = train_OC_SVM(hist,params)
-            elif "hidden_layer_sizes" in params_training:
-                model = train_Network(hist, labels, params)
+            keys, values = zip(*params_training.items())
+            permutations = [dict(zip(keys, v)) for v in product(*values)]
+
+            for params in permutations:
+                if "C" in params_training:
+                    model = train_SVC(hist,labels, params)
+                elif "OC" in params_training:
+                    model = train_OC_SVM(hist,params)
+                elif "hidden_layer_sizes" in params_training:
+                    model = train_Network(hist, labels, params)
             
 
-            prediction = test_model(hist_test, model, video_classification)
+                prediction = test_model(hist_test, model, video_classification)
 
-            acc = accuracy_score(labels_test,prediction)
+                acc = accuracy_score(labels_test,prediction)
                 
-            params_list.append(dict({"n_bins":n_bins},**params))
-            try:
-                auc = roc_auc_score(labels_test,prediction)
-            except:
-                auc = 0
+                params_list.append(dict({"n_bins":n_bins,"code_size":code_size},**params))
+                try:
+                    auc = roc_auc_score(labels_test,prediction)
+                except:
+                    auc = 0
 
-            acc_list.append(acc)
-            auc_list.append(auc)
+                acc_list.append(acc)
+                auc_list.append(auc)
                     
-            if verbose > 0:
-                print("ACC: {:1.2f} - AUC: {:1.2f} - {}".format(acc, auc, params_list[-1]))
+                if verbose > 0:
+                    print("ACC: {:1.2f} - AUC: {:1.2f} - {}".format(acc, auc, params_list[-1]))
 
     return acc_list, auc_list, params_list
 
