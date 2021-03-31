@@ -12,8 +12,11 @@ from data import get_Range_Descriptors
 from data import prepare_Hist_and_Labels
 
 from autoencoders import Autoencoder
+from keras.losses import BinaryCrossentropy
+from keras.losses import MeanSquaredError
+import keras
 
-def train_and_Test(training, test, video_classification, params_training, bins_vals, encoder_vals, verbose = 0, eliminar_descriptores = []):    
+def train_and_Test(training, test, video_classification, params_training, bins_vals, encoder_vals, verbose = 0, eliminar_descriptores = []):  
     acc_list = []
     auc_list = []
     params_list = []
@@ -21,11 +24,12 @@ def train_and_Test(training, test, video_classification, params_training, bins_v
     range_max, range_min = get_Range_Descriptors(training, video_classification)
 
     for n_bins in bins_vals:
-        hist_original, labels = prepare_Hist_and_Labels(training, range_max,range_min, video_classification, n_bins, eliminar_descriptores, eliminar_vacios = True)
+        hist_original, labels_original = prepare_Hist_and_Labels(training, range_max,range_min, video_classification, n_bins, eliminar_descriptores, eliminar_vacios = True)
         
         hist_test_original, labels_test = prepare_Hist_and_Labels(test, range_max,range_min,video_classification, n_bins, eliminar_descriptores)
 
         for code_size in encoder_vals:
+            
             if code_size is None:
                 hist = hist_original.copy()
                 hist_test = hist_test_original.copy()
@@ -37,9 +41,24 @@ def train_and_Test(training, test, video_classification, params_training, bins_v
                 hist_test = pca.transform(hist_test_original)
                 
             else:
+                labels = np.array([[0,1] if label == 1 else [1,0] for label in labels_original])
                 autoencoder = Autoencoder(len(hist_original[0]), code_size)
-                autoencoder.compile(optimizer = 'adam', loss = 'mean_squared_error')
-                autoencoder.fit(hist_original,hist_original,verbose = verbose-1, epochs = 50)
+                autoencoder.compile(optimizer = 'adam',
+                                    loss = {"output_2":MeanSquaredError(),
+                                            "output_1":keras.losses.KLDivergence()},
+                                    metrics = {"output_1":keras.metrics.BinaryAccuracy(name='acc')})
+
+                ES = keras.callbacks.EarlyStopping(monitor = 'val_output_1_loss',
+                                            patience = 10, restore_best_weights = True)
+                
+                history = autoencoder.fit(hist_original,{"output_2":hist_original,
+                                                         "output_1":labels},
+                                          verbose = 0, epochs = 100,
+                                          validation_split = 0.3, callbacks = ES)
+                if verbose > 0:
+                    print("ACCtrain: {:1.3f}\t ACCval {:1.3f}".format(
+                        history.history['output_1_acc'][-1],
+                        history.history['val_output_1_acc'][-1]))
                 hist = autoencoder.encoder.predict(hist_original)
                 hist_test = autoencoder.encoder.predict(hist_test_original)
 
@@ -47,15 +66,21 @@ def train_and_Test(training, test, video_classification, params_training, bins_v
             permutations = [dict(zip(keys, v)) for v in product(*values)]
 
             for params in permutations:
-                if "C" in params_training:
-                    model = train_SVC(hist,labels, params)
+                if "auto" in params_training:
+                    model = autoencoder.clasificador
+                elif "C" in params_training:
+                    model = train_SVC(hist,labels_original, params)
                 elif "OC" in params_training:
                     model = train_OC_SVM(hist,params)
                 elif "hidden_layer_sizes" in params_training:
-                    model = train_Network(hist, labels, params)
+                    model = train_Network(hist, labels_original, params)
+                elif "n_estimators" in params_training:
+                    model = train_RF(hist,labels_original, params)
             
-
                 prediction = test_model(hist_test, model, video_classification)
+
+                if "auto" in params_training:
+                    prediction = [1 if pred[1] > pred[0]  else -1 for pred in prediction]
 
                 acc = accuracy_score(labels_test,prediction)
                 
@@ -95,6 +120,17 @@ def train_SVC(samples, labels, params, out_file = None):
 
 def train_Network(samples, labels, params, out_file = None):
     model = MLPClassifier(max_iter = 2000, **params)
+
+    model.fit(samples,labels)
+
+    if out_file is not None:
+        joblib.dump(model, out_file)
+
+    return model
+
+from sklearn.ensemble import RandomForestClassifier
+def train_RF(samples, labels, params, out_file = None):
+    model = RandomForestClassifier(**params)
 
     model.fit(samples,labels)
 

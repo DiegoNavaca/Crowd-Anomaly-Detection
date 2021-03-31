@@ -44,9 +44,12 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = 1, vide
             if video_classification:
                 labels = [gt[name]]
             else:
-                beginning, end, length = gt[name]
-                L = params["L"]
-                labels = [1 if i < (beginning-L) or i > (end-L) else -1 for i in range(length-L+1)]
+                try:
+                    beginning, end, length = gt[name]
+                    L = params["L"]
+                    labels = [1 if i < (beginning-L) or i > (end-L) else -1 for i in range(length-L+1)]
+                except TypeError:
+                    labels = [gt[name]]
             
             labels_file = open(output_dir+name+".labels","wb")
             pickle.dump(labels,labels_file)

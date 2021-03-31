@@ -99,7 +99,7 @@ def try_CVD(params_extraction,params_training, verbose = 2):
 
     #params["use_sift"] = 2000
 
-    acc, auc, best_params = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir, params_extraction,params_training, 50, verbose-1, is_video_classification = True)
+    acc, auc, best_params = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir, params_extraction,params_training, 50, verbose-1, is_video_classification = False)
 
     if verbose > 0:
         print("RESULTADOS:")
@@ -135,7 +135,9 @@ def try_CVD(params_extraction,params_training, verbose = 2):
 skip_extraction = True
 
 params_extraction = {"L":10, "t1":-5, "t2":1, "min_motion":0.025, "fast_threshold":10, "others":{}}
-params_training = {"C":[4,8,16,32,64,128], "bins":[16,32,64,128,256], "code_size":[4,8,16,32]}
+#params_training = {"auto":[True], "bins":[32,64,128,256], "code_size":[8,16,32,64]}
+#params_training = {"n_estimators":[10,50,100,200],"bins":[32,64,128,256],"code_size":[None,0.95]}
+params_training = {"C":[32,64], "bins":[128], "code_size":[None,0.95], "max_iter":[10000]}
 #params_training = {"hidden_layer_sizes":[(64,16),(12,8,6,4),(8,4)], "bins":[64,128,256], "code_size":[None,16,0.95]}
 #params_training = {"nu":[0.2,0.1], "bins":[64,128,256],"code_size":[16,32,64], "OC":[True]}
 
