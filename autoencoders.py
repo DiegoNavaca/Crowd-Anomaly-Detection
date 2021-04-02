@@ -8,24 +8,26 @@ from keras.layers import Dense
 from keras.models import Model
 
 class Autoencoder(Model):
-    def __init__(self, input_size, latent_dim):
-        act = 'relu'
+    def __init__(self, input_size, latent_dim, params):
+        act = params['activation']
         super().__init__()
         self.latent_dim = latent_dim
-        self.encoder = keras.Sequential([
-            Dense(latent_dim+input_size // 2, activation=act),
-            #Dense(latent_dim+input_size // 4, activation=act),
-            Dense(latent_dim, activation=act),
-            BatchNormalization(),
-        ], name = "encoder")
+        layers = [Dense(latent_dim, activation=act)]
+        if 'dropout' in params:
+            layers.insert(0,Dropout(params['dropout']))
+        if params.get('batch_norm',False):
+            layers.insert(-1,BatchNormalization())
+        if 'extra_decoder_layers' in params:
+            for i in range(params['extra_decoder_layers']):
+                layers.insert(0,Dense(latent_dim+input_size // 2**(i+1)))
+        
+        self.encoder = keras.Sequential(layers, name = "encoder")
         input_layer = keras.Input(latent_dim)
         
         x = Dense(latent_dim+input_size // 2, activation=act)(input_layer)
         self.decoder = Dense(input_size, activation='sigmoid', name = "decoder")(x)
 
-        x = Dense(latent_dim//2,activation = act,
-                  )(input_layer)
-        self.classifier = Dense(2, activation = 'softmax', name = "classifier")(x)
+        self.classifier = Dense(2, activation = 'softmax', name = "classifier")(input_layer)
         
         self.salida = keras.Model(inputs = input_layer, outputs = [self.classifier, self.decoder])
         self.clasificador = keras.Model(inputs = input_layer, outputs = self.classifier)

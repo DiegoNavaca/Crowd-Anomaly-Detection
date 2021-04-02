@@ -16,7 +16,7 @@ from keras.losses import BinaryCrossentropy
 from keras.losses import MeanSquaredError
 import keras
 
-def train_and_Test(training, test, video_classification, params_training, bins_vals, encoder_vals, verbose = 0, eliminar_descriptores = []):  
+def train_and_Test(training, test, video_classification, params_training, params_autoencoder, bins_vals, encoder_vals, verbose = 0, eliminar_descriptores = []):  
     acc_list = []
     auc_list = []
     params_list = []
@@ -42,7 +42,7 @@ def train_and_Test(training, test, video_classification, params_training, bins_v
                 
             else:
                 labels = np.array([[0,1] if label == 1 else [1,0] for label in labels_original])
-                autoencoder = Autoencoder(len(hist_original[0]), code_size)
+                autoencoder = Autoencoder(len(hist_original[0]), code_size, params_autoencoder)
                 autoencoder.compile(optimizer = 'adam',
                                     loss = {"output_2":MeanSquaredError(),
                                             "output_1":keras.losses.KLDivergence()},
@@ -54,7 +54,7 @@ def train_and_Test(training, test, video_classification, params_training, bins_v
                 history = autoencoder.fit(hist_original,{"output_2":hist_original,
                                                          "output_1":labels},
                                           verbose = 0, epochs = 100,
-                                          validation_split = 0.3, callbacks = ES)
+                                          validation_split = 0.2, callbacks = ES)
                 if verbose > 0:
                     print("ACCtrain: {:1.3f}\t ACCval {:1.3f}".format(
                         history.history['output_1_acc'][-1],
