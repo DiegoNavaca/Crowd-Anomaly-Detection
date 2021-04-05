@@ -27,7 +27,7 @@ class Autoencoder(Model):
         x = Dense(latent_dim+input_size // 2, activation=act)(input_layer)
         self.decoder = Dense(input_size, activation='sigmoid', name = "decoder")(x)
 
-        self.classifier = Dense(2, activation = 'softmax', name = "classifier")(input_layer)
+        self.classifier = Dense(1, activation = 'softmax', name = "classifier")(input_layer)
         
         self.salida = keras.Model(inputs = input_layer, outputs = [self.classifier, self.decoder])
         self.clasificador = keras.Model(inputs = input_layer, outputs = self.classifier)
@@ -41,6 +41,8 @@ class Autoencoder(Model):
 
 import matplotlib.pyplot as plt
 from keras.models import load_model
+from keras import losses
+from keras.metrics import BinaryAccuracy
 from data import get_Range_Descriptors
 from data import prepare_Hist_and_Labels
 
@@ -52,10 +54,17 @@ def visualice_data(descriptors_dir,n_bins, is_video_classification):
         
     hist, labels = prepare_Hist_and_Labels(names,range_max, range_min, is_video_classification, n_bins, [], eliminar_vacios = True)
 
-    encoder_dir = "Encoders/"+descriptors_dir.split("/",1)[1]
-    encoder_file = encoder_dir+"encoder"+str(n_bins)+".h5"
-    encoder = load_model(encoder_file, compile=False)
-    hist = encoder.predict(np.array(hist))
+    params = {'activation':'relu', 'extra_layers':1,'dropout':0.4,'batch_norm':True}
+    autoencoder = Autoencoder(len(hist[0]),2,params)
+
+    autoencoder.compile(optimizer = 'adam',
+                                    loss = {"output_2":losses.MeanSquaredError(),
+                                            "output_1":losses.Poisson()},
+                                    metrics = {"output_1":BinaryAccuracy(name='acc')})
+    autoencoder.fit(hist,{"output_2":hist,"output_1":labels},
+                                          verbose = 1, epochs = 20,
+                                          validation_split = 0.2)
+    hist = autoencoder.encoder.predict(np.array(hist))
 
     if len(hist[0]) > 2:
         ax = plt.axes(projection ="3d")
@@ -69,3 +78,6 @@ def visualice_data(descriptors_dir,n_bins, is_video_classification):
             plt.scatter(x,y, label = label)
     plt.legend()
     plt.show()
+
+if __name__ == "__main__":
+    visualice_data("Descriptors/CVD/",32,True)

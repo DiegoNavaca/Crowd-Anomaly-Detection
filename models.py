@@ -24,7 +24,7 @@ def train_and_Test(training, test, video_classification, params_training, params
     range_max, range_min = get_Range_Descriptors(training, video_classification)
 
     for n_bins in bins_vals:
-        hist_original, labels_original = prepare_Hist_and_Labels(training, range_max,range_min, video_classification, n_bins, eliminar_descriptores, eliminar_vacios = True)
+        hist_original, labels = prepare_Hist_and_Labels(training, range_max,range_min, video_classification, n_bins, eliminar_descriptores, eliminar_vacios = True)
         
         hist_test_original, labels_test = prepare_Hist_and_Labels(test, range_max,range_min,video_classification, n_bins, eliminar_descriptores)
 
@@ -41,11 +41,11 @@ def train_and_Test(training, test, video_classification, params_training, params
                 hist_test = pca.transform(hist_test_original)
                 
             else:
-                labels = np.array([[0,1] if label == 1 else [1,0] for label in labels_original])
                 autoencoder = Autoencoder(len(hist_original[0]), code_size, params_autoencoder)
+                class_loss = params_autoencoder["class_loss"]
                 autoencoder.compile(optimizer = 'adam',
                                     loss = {"output_2":MeanSquaredError(),
-                                            "output_1":keras.losses.KLDivergence()},
+                                            "output_1":class_loss},
                                     metrics = {"output_1":keras.metrics.BinaryAccuracy(name='acc')})
 
                 ES = keras.callbacks.EarlyStopping(monitor = 'val_output_1_loss',
@@ -69,18 +69,15 @@ def train_and_Test(training, test, video_classification, params_training, params
                 if "auto" in params_training:
                     model = autoencoder.clasificador
                 elif "C" in params_training:
-                    model = train_SVC(hist,labels_original, params)
+                    model = train_SVC(hist,labels, params)
                 elif "OC" in params_training:
                     model = train_OC_SVM(hist,params)
                 elif "hidden_layer_sizes" in params_training:
-                    model = train_Network(hist, labels_original, params)
+                    model = train_Network(hist, labels, params)
                 elif "n_estimators" in params_training:
-                    model = train_RF(hist,labels_original, params)
+                    model = train_RF(hist,labels, params)
             
                 prediction = test_model(hist_test, model, video_classification)
-
-                if "auto" in params_training:
-                    prediction = [1 if pred[1] > pred[0]  else -1 for pred in prediction]
 
                 acc = accuracy_score(labels_test,prediction)
                 
