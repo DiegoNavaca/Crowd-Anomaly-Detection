@@ -82,7 +82,7 @@ def get_Histograms(des_file, range_max, range_min, n_bins, eliminar_descriptores
         
     return histograms, vacios
 
-def prepare_Hist_and_Labels(files, range_max,range_min, is_video_classification, n_bins, eliminar_descriptores, eliminar_vacios =False):
+def prepare_Hist_and_Labels(files, range_max,range_min, is_video_classification, n_bins, eliminar_descriptores, eliminar_vacios =False, n_parts = 1):
     histograms = []
     labels = []
     
@@ -95,12 +95,14 @@ def prepare_Hist_and_Labels(files, range_max,range_min, is_video_classification,
                 del h[vacios[i]] 
 
             # The values of the video are the average of the values in all frames
-            h = [sum(x)/len(x) for x in zip(*h)]
+            if len(h) > n_parts:
+                for i in range(n_parts):
+                    aux = [sum(x)/len(x) for x in
+                           zip(*h[i*len(h)//n_parts:(i+1)*len(h)//n_parts])]
             
-            if len(h) != 0:
-                histograms.append(h)
+                    histograms.append(aux)
             
-                labels += read_Labels(f+".labels")
+                labels += list(read_Labels(f+".labels"))*n_parts
             
         else:
             h, vacios = get_Histograms(f, range_max, range_min, n_bins, eliminar_descriptores)

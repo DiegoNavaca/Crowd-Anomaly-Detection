@@ -12,46 +12,48 @@ from data import get_Range_Descriptors
 from data import prepare_Hist_and_Labels
 
 from autoencoders import Autoencoder
-from keras.losses import BinaryCrossentropy
 from keras.losses import MeanSquaredError
+from keras.metrics import BinaryAccuracy
+from keras.callbacks import EarlyStopping
 import keras
 
-def train_and_Test(training, test, video_classification, params_training, params_autoencoder, bins_vals, encoder_vals, verbose = 0, eliminar_descriptores = []):  
+def train_and_Test(training, test, video_classification, params, verbose = 0, eliminar_descriptores = []):  
     acc_list = []
     auc_list = []
     params_list = []
 
     range_max, range_min = get_Range_Descriptors(training, video_classification)
 
-    for n_bins in bins_vals:
-        hist_original, labels = prepare_Hist_and_Labels(training, range_max,range_min, video_classification, n_bins, eliminar_descriptores, eliminar_vacios = True)
+    for n_bins in params["bins"]:
+        original_hist, original_labels = prepare_Hist_and_Labels(training, range_max,range_min, video_classification, n_bins, eliminar_descriptores, eliminar_vacios = True, n_parts = params["n_parts"])
         
-        hist_test_original, labels_test = prepare_Hist_and_Labels(test, range_max,range_min,video_classification, n_bins, eliminar_descriptores)
+        original_test_hist, labels_test = prepare_Hist_and_Labels(test, range_max,range_min,video_classification, n_bins, eliminar_descriptores, n_parts = params["n_parts"])
 
-        for code_size in encoder_vals:
+        for code_size in params["code_size"]:
             
             if code_size is None:
-                hist = hist_original.copy()
-                hist_test = hist_test_original.copy()
+                hist = original_hist.copy()
+                hist_test = original_test_hist.copy()
                 
             elif code_size < 1.0:
                 pca = PCA(n_components=code_size)
-                pca.fit(hist_original)
-                hist = pca.transform(hist_original)
-                hist_test = pca.transform(hist_test_original)
+                pca.fit(original_hist)
+                hist = pca.transform(original_hist)
+                hist_test = pca.transform(original_test_hist)
                 
             else:
-                autoencoder = Autoencoder(len(hist_original[0]), code_size, params_autoencoder)
-                class_loss = params_autoencoder["class_loss"]
+                labels = np.array([[1,0] if label == 1 else [0,1] for label in original_labels])
+                autoencoder = Autoencoder(len(original_hist[0]), code_size, params["autoencoder"])
+                class_loss = params["autoencoder"]["class_loss"]
                 autoencoder.compile(optimizer = 'adam',
                                     loss = {"output_2":MeanSquaredError(),
                                             "output_1":class_loss},
-                                    metrics = {"output_1":keras.metrics.BinaryAccuracy(name='acc')})
+                                    metrics = {"output_1":BinaryAccuracy(name='acc')})
 
-                ES = keras.callbacks.EarlyStopping(monitor = 'val_output_1_loss',
+                ES = EarlyStopping(monitor = 'val_output_1_loss',
                                             patience = 10, restore_best_weights = True)
                 
-                history = autoencoder.fit(hist_original,{"output_2":hist_original,
+                history = autoencoder.fit(original_hist,{"output_2":original_hist,
                                                          "output_1":labels},
                                           verbose = 0, epochs = 100,
                                           validation_split = 0.2, callbacks = ES)
@@ -59,39 +61,40 @@ def train_and_Test(training, test, video_classification, params_training, params
                     print("ACCtrain: {:1.3f}\t ACCval {:1.3f}".format(
                         history.history['output_1_acc'][-1],
                         history.history['val_output_1_acc'][-1]))
-                hist = autoencoder.encoder.predict(hist_original)
-                hist_test = autoencoder.encoder.predict(hist_test_original)
+                hist = autoencoder.encoder.predict(original_hist)
+                hist_test = autoencoder.encoder.predict(original_test_hist)
 
-            keys, values = zip(*params_training.items())
+            keys, values = zip(*params["training"].items())
             permutations = [dict(zip(keys, v)) for v in product(*values)]
 
-            for params in permutations:
-                if "auto" in params_training:
-                    model = autoencoder.clasificador
-                elif "C" in params_training:
-                    model = train_SVC(hist,labels, params)
-                elif "OC" in params_training:
-                    model = train_OC_SVM(hist,params)
-                elif "hidden_layer_sizes" in params_training:
-                    model = train_Network(hist, labels, params)
-                elif "n_estimators" in params_training:
-                    model = train_RF(hist,labels, params)
+            for training_params in permutations:
+                if "auto" in params["training"]:
+                    model = autoencoder.classifier_model
+                elif "C" in params["training"]:
+                    model = train_SVC(hist,original_labels, training_params)
+                elif "OC" in params["training"]:
+                    model = train_OC_SVM(hist,training_params)
+                elif "hidden_layer_sizes" in params["training"]:
+                    model = train_Network(hist, original_labels, training_params)
+                elif "n_estimators" in params["training"]:
+                    model = train_RF(hist,original_labels, training_params)
             
                 prediction = test_model(hist_test, model, video_classification)
+                if "auto" in params["training"]:
+                    prediction = [1 if p[0] > p[1] else -1 for p in prediction]
 
                 acc = accuracy_score(labels_test,prediction)
+                auc = roc_auc_score(labels_test,prediction)
                 
-                params_list.append(dict({"n_bins":n_bins,"code_size":code_size},**params))
-                try:
-                    auc = roc_auc_score(labels_test,prediction)
-                except:
-                    auc = 0
-
+                params_list.append(dict({"n_bins":n_bins,"code_size":code_size},
+                                        **training_params))
+                
                 acc_list.append(acc)
                 auc_list.append(auc)
                     
                 if verbose > 0:
-                    print("ACC: {:1.2f} - AUC: {:1.2f} - {}".format(acc, auc, params_list[-1]))
+                    print("ACC: {:1.2f} - AUC: {:1.2f} - {}".format(
+                        acc, auc, params_list[-1]))
 
     return acc_list, auc_list, params_list
 

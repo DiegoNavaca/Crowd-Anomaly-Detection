@@ -27,10 +27,10 @@ class Autoencoder(Model):
         x = Dense(latent_dim+input_size // 2, activation=act)(input_layer)
         self.decoder = Dense(input_size, activation='sigmoid', name = "decoder")(x)
 
-        self.classifier = Dense(1, activation = 'softmax', name = "classifier")(input_layer)
+        self.classifier_layer = Dense(2, activation = params["classifier_act"], name = "classifier")(input_layer)
         
-        self.salida = keras.Model(inputs = input_layer, outputs = [self.classifier, self.decoder])
-        self.clasificador = keras.Model(inputs = input_layer, outputs = self.classifier)
+        self.salida = keras.Model(inputs = input_layer, outputs = [self.classifier_layer, self.decoder])
+        self.classifier_model = keras.Model(inputs = input_layer, outputs = self.classifier_layer)
 
     def call(self, x):
         encoded = self.encoder(x)
