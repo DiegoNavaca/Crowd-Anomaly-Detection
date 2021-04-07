@@ -17,17 +17,28 @@ class Autoencoder(Model):
             layers.insert(0,Dropout(params['dropout']))
         if params.get('batch_norm',False):
             layers.insert(-1,BatchNormalization())
-        if 'extra_decoder_layers' in params:
+        if 'extra_coder_layers' in params:
             for i in range(params['extra_decoder_layers']):
                 layers.insert(0,Dense(latent_dim+input_size // 2**(i+1)))
         
         self.encoder = keras.Sequential(layers, name = "encoder")
         input_layer = keras.Input(latent_dim)
         
-        x = Dense(latent_dim+input_size // 2, activation=act)(input_layer)
-        self.decoder = Dense(input_size, activation='sigmoid', name = "decoder")(x)
+        if params.get('extra_decoder_layers',0) > 0:
+            x = Dense(latent_dim+input_size // 2**params['extra_decoder_layers'], activation=act)(input_layer)
+            for i in range(params['extra_decoder_layers']-2,0,-1):
+                x = Dense(latent_dim+input_size // 2**(i+1))(x)
+            self.decoder = Dense(input_size, activation='sigmoid', name = "decoder")(x)
+        else:
+            self.decoder = Dense(input_size, activation='sigmoid', name = "decoder")(input_layer)
 
-        self.classifier_layer = Dense(2, activation = params["classifier_act"], name = "classifier")(input_layer)
+        if params.get('extra_class_layers',0) > 0:
+            x = Dense(latent_dim+input_size // 2, activation=act)(input_layer)
+            for i in range(1,params['extra_decoder_layers']):
+                x = Dense(latent_dim // 2**(i+1))(x)
+            self.classifier_layer = Dense(2, activation = params["classifier_act"], name = "classifier")(x)
+        else:
+            self.classifier_layer = Dense(2, activation = params["classifier_act"], name = "classifier")(input_layer)
         
         self.salida = keras.Model(inputs = input_layer, outputs = [self.classifier_layer, self.decoder])
         self.classifier_model = keras.Model(inputs = input_layer, outputs = self.classifier_layer)

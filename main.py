@@ -133,7 +133,8 @@ if __name__ == "__main__":
     params_extraction = {"L":10, "t1":-5, "t2":1, "min_motion":0.025,
                          "fast_threshold":10, "others":{}}
     params_autoencoder = {"activation":"relu","dropout":0.4,"batch_norm":True,
-                          "extra_layers":1, "class_loss":"binary_crossentropy"}
+                          "extra_layers":1, "class_loss":"binary_crossentropy",
+                          "classifier_act":"sigmoid"}
     #params_training = {"C":[8,16,32,64]}
     params_training = {"auto":[True]}
     params = {"extraction":params_extraction, "autoencoder":params_autoencoder,

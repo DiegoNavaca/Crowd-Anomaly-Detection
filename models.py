@@ -17,7 +17,7 @@ from keras.metrics import BinaryAccuracy
 from keras.callbacks import EarlyStopping
 import keras
 
-def train_and_Test(training, test, video_classification, params, verbose = 0, eliminar_descriptores = []):  
+def train_and_Test(training, test, video_classification, params, verbose = 0):  
     acc_list = []
     auc_list = []
     params_list = []
@@ -25,9 +25,9 @@ def train_and_Test(training, test, video_classification, params, verbose = 0, el
     range_max, range_min = get_Range_Descriptors(training, video_classification)
 
     for n_bins in params["bins"]:
-        original_hist, original_labels = prepare_Hist_and_Labels(training, range_max,range_min, video_classification, n_bins, eliminar_descriptores, eliminar_vacios = True, n_parts = params["n_parts"])
+        original_hist, original_labels = prepare_Hist_and_Labels(training, range_max,range_min, video_classification, n_bins, params.get("eliminar_descriptores",[]), eliminar_vacios = True, n_parts = params["n_parts"])
         
-        original_test_hist, labels_test = prepare_Hist_and_Labels(test, range_max,range_min,video_classification, n_bins, eliminar_descriptores, n_parts = params["n_parts"])
+        original_test_hist, labels_test = prepare_Hist_and_Labels(test, range_max,range_min,video_classification, n_bins, params.get("eliminar_descriptores",[]), n_parts = params["n_parts"])
 
         for code_size in params["code_size"]:
             
@@ -50,17 +50,15 @@ def train_and_Test(training, test, video_classification, params, verbose = 0, el
                                             "output_1":class_loss},
                                     metrics = {"output_1":BinaryAccuracy(name='acc')})
 
-                ES = EarlyStopping(monitor = 'val_output_1_loss',
-                                            patience = 10, restore_best_weights = True)
+                #ES = EarlyStopping(monitor = 'val_output_1_loss',
+                #                            patience = 10, restore_best_weights = True)
                 
                 history = autoencoder.fit(original_hist,{"output_2":original_hist,
                                                          "output_1":labels},
-                                          verbose = 0, epochs = 100,
-                                          validation_split = 0.2, callbacks = ES)
+                                          verbose = 0, epochs = params["autoencoder"].get("epochs",20))
                 if verbose > 0:
                     print("ACCtrain: {:1.3f}\t ACCval {:1.3f}".format(
-                        history.history['output_1_acc'][-1],
-                        history.history['val_output_1_acc'][-1]))
+                        history.history['output_1_acc'][-1]))
                 hist = autoencoder.encoder.predict(original_hist)
                 hist_test = autoencoder.encoder.predict(original_test_hist)
 
