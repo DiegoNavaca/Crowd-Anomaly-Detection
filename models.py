@@ -50,15 +50,15 @@ def train_and_Test(training, test, video_classification, params, verbose = 0):
                                             "output_1":class_loss},
                                     metrics = {"output_1":BinaryAccuracy(name='acc')})
 
-                #ES = EarlyStopping(monitor = 'val_output_1_loss',
-                #                            patience = 10, restore_best_weights = True)
+                ES = EarlyStopping(monitor = 'val_output_1_loss',
+                                            patience = 10, restore_best_weights = True)
                 
                 history = autoencoder.fit(original_hist,{"output_2":original_hist,
                                                          "output_1":labels},
-                                          verbose = 0, epochs = params["autoencoder"].get("epochs",20))
+                                          verbose = 0, epochs = params["autoencoder"].get("epochs",20), validation_split = 0.2, callbacks = ES)
                 if verbose > 0:
                     print("ACCtrain: {:1.3f}\t ACCval {:1.3f}".format(
-                        history.history['output_1_acc'][-1]))
+                        history.history['output_1_acc'][-1],history.history['val_output_1_acc'][-1]))
                 hist = autoencoder.encoder.predict(original_hist)
                 hist_test = autoencoder.encoder.predict(original_test_hist)
 

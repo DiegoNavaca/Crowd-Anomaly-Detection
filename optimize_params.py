@@ -29,9 +29,10 @@ def objective(trial):
 
     return auc
 
-study = optuna.create_study(direction='maximize', study_name = 'CVD_AU', storage="sqlite:///CVD_AU.db", load_if_exists = True)
-study.optimize(objective, n_trials = 200)
+#study = optuna.create_study(direction='maximize', study_name = 'CVD_AU', storage="sqlite:///CVD_AU.db", load_if_exists = True)
+#study.optimize(objective, n_trials = 200)
 
-#study = optuna.load_study(study_name = 'CVD', storage = 'sqlite:///Optuna Databases/CVD.db')
+study = optuna.load_study(study_name = 'CVD_AU', storage = 'sqlite:///Optuna Databases/CVD_AU.db')
 print(study.best_params, study.best_value)
-print(optuna.importance.get_param_importances(study))
+print()
+print(optuna.importance.get_param_importances(study,evaluator = optuna.importance.MeanDecreaseImpurityImportanceEvaluator()))

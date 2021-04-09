@@ -130,20 +130,20 @@ def try_CVD(params, verbose = 2, skip_extraction = True):
 ############################################################################
 
 if __name__ == "__main__":
-    params_extraction = {"L":10, "t1":-5, "t2":1, "min_motion":0.025,
-                         "fast_threshold":10, "others":{}}
-    params_autoencoder = {"activation":"relu","dropout":0.4,"batch_norm":True,
-                          "extra_layers":1, "class_loss":"binary_crossentropy",
-                          "classifier_act":"sigmoid"}
-    #params_training = {"C":[8,16,32,64]}
-    params_training = {"auto":[True]}
-    params = {"extraction":params_extraction, "autoencoder":params_autoencoder,
-              "training":params_training, "bins":[64,128,256],"code_size":[128,256],
-              "n_parts":5}
+    for L in (5,10,15):
+        for fast_threshold in (7,10,20):
+            params_extraction = {"L":L, "t1":-5, "t2":1, "min_motion":0.025,
+                                 "fast_threshold":fast_threshold, "others":{}}
+            params_autoencoder = {"activation":"relu","dropout":0.15731506011875585,"batch_norm":True,'extra_class_layers': 4, 'extra_coder_layers': 2,'extra_decoder_layers': 0, "class_loss":"kl_divergence","classifier_act":"softmax", "epochs":100}
+            params_training = {"C":[32,64,128,217,256]}
+            #params_training = {"auto":[True]}
+            params = {"extraction":params_extraction, "autoencoder":params_autoencoder,
+                      "training":params_training, "bins":[50,100,128,150,200,256,300,350],"code_size":[50,100,150,200,25,300,350],
+                      "n_parts":1}
 
 
-    #acc, auc, best_params = try_UMN(2,params, verbose = 3)
-    acc, auc, best_params = try_CVD(params, verbose = 3)
+            #acc, auc, best_params = try_UMN(2,params, verbose = 3)
+            acc, auc, best_params = try_CVD(params, verbose = 1, skip_extraction = False)
 
 
 ################################ Resultados ################################
@@ -175,3 +175,7 @@ if __name__ == "__main__":
 # {'n_bins': 128, 'code_size': 0.95, 'C': 32}
 # Accuracy: 0.895
 # AUC: 0.896
+
+# {'C': 217, 'autoencoder': 253, 'bins': 189, 'class_act': 'softmax', 'class_loss': 'kl_divergence',
+# 'dropout': 0.15731506011875585, 'epochs': 28, 'extra_class_layers': 4, 'extra_coder_layers': 2,
+# 'extra_decoder_layers': 0, 'n_video_parts': 1} 0.8897196137196136
