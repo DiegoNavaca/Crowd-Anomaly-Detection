@@ -9,21 +9,26 @@ from keras.models import Model
 
 class Autoencoder(Model):
     def __init__(self, input_size, latent_dim, params):
-        act = params['activation']
         super().__init__()
+        
+        act = params['activation']
+        
         self.latent_dim = latent_dim
+
+        # Encoder
         layers = [Dense(latent_dim, activation=act)]
         if 'dropout' in params:
             layers.insert(0,Dropout(params['dropout']))
         if params.get('batch_norm',False):
             layers.insert(-1,BatchNormalization())
-        if 'extra_coder_layers' in params:
-            for i in range(params['extra_decoder_layers']):
+        if 'extra_encoder_layers' in params:
+            for i in range(params['extra_encoder_layers']):
                 layers.insert(0,Dense(latent_dim+input_size // 2**(i+1)))
         
         self.encoder = keras.Sequential(layers, name = "encoder")
         input_layer = keras.Input(latent_dim)
-        
+
+        # Decoder
         if params.get('extra_decoder_layers',0) > 0:
             x = Dense(latent_dim+input_size // 2**params['extra_decoder_layers'], activation=act)(input_layer)
             for i in range(params['extra_decoder_layers']-2,0,-1):
@@ -32,9 +37,10 @@ class Autoencoder(Model):
         else:
             self.decoder = Dense(input_size, activation='sigmoid', name = "decoder")(input_layer)
 
+        # Classifier
         if params.get('extra_class_layers',0) > 0:
             x = Dense(latent_dim+input_size // 2, activation=act)(input_layer)
-            for i in range(1,params['extra_decoder_layers']):
+            for i in range(1,params['extra_class_layers']):
                 x = Dense(latent_dim // 2**(i+1))(x)
             self.classifier_layer = Dense(2, activation = params["classifier_act"], name = "classifier")(x)
         else:
@@ -51,7 +57,6 @@ class Autoencoder(Model):
 ################################# VISUALIZATION ##########################################
 
 import matplotlib.pyplot as plt
-from keras.models import load_model
 from keras import losses
 from keras.metrics import BinaryAccuracy
 from data import get_Range_Descriptors

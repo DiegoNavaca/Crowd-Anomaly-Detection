@@ -3,6 +3,7 @@ import pickle
 
 from files import read_Labels
 
+# Returns the max and min values for each descriptor's histogram based on the training values
 def get_Range_Descriptors(files, is_video_classification, n_descriptors = 8):
     # Max value of every descriptor on training
     maximos = np.zeros(n_descriptors)
@@ -11,7 +12,8 @@ def get_Range_Descriptors(files, is_video_classification, n_descriptors = 8):
 
         f = open(des_file+".data","rb")
         k = 0
-        while True:
+        
+        while True: # For every descriptor in the file
             try:
                 descriptores = pickle.load(f)
                 
@@ -26,7 +28,7 @@ def get_Range_Descriptors(files, is_video_classification, n_descriptors = 8):
                 # Anomaly values aren't taken into account
                 if label != -1:
                     for i, d in enumerate(descriptores):
-                        # We use percentile to remove the outliers
+                        # We use a percentile to remove the outliers
                         aux = np.percentile(d,95)
                     
                         if aux > maximos[i]:
@@ -39,9 +41,10 @@ def get_Range_Descriptors(files, is_video_classification, n_descriptors = 8):
     
         f.close()
 
+    # Not worthwhile to look for the minimums
     return maximos, np.zeros(n_descriptors)
 
-# Function to get the normalized histograms of a set of descriptors
+# Returns the normalized histograms of a set of descriptors
 def get_Histograms(des_file, range_max, range_min, n_bins, eliminar_descriptores):
     
     f = open(des_file+".data", "rb")
@@ -82,41 +85,43 @@ def get_Histograms(des_file, range_max, range_min, n_bins, eliminar_descriptores
         
     return histograms, vacios
 
+# Returns the features vector and the labels of a set of descriptor files
 def prepare_Hist_and_Labels(files, range_max,range_min, is_video_classification, n_bins, eliminar_descriptores, eliminar_vacios =False, n_parts = 1):
-    histograms = []
+    total_histograms = []
     labels = []
     
     for f in files:
         if is_video_classification:
-            h, vacios = get_Histograms(f, range_max, range_min, n_bins, eliminar_descriptores)
+            histograms, vacios = get_Histograms(f, range_max, range_min, n_bins, eliminar_descriptores)
 
             # We remove frames without information to get a more reliable average
             for i in range(len(vacios)-1,0,-1):
-                del h[vacios[i]] 
+                del histograms[vacios[i]] 
 
             # The values of the video are the average of the values in all frames
-            if len(h) > n_parts:
+            if len(histograms) > n_parts:
                 for i in range(n_parts):
                     aux = [sum(x)/len(x) for x in
-                           zip(*h[i*len(h)//n_parts:(i+1)*len(h)//n_parts])]
+                           zip(*histograms[i*len(histograms)//n_parts:(i+1)*len(histograms)//n_parts])]
             
-                    histograms.append(aux)
+                    total_histograms.append(aux)
             
                 labels += list(read_Labels(f+".labels"))*n_parts
-            
+
+        # If we classify each frame individually
         else:
-            h, vacios = get_Histograms(f, range_max, range_min, n_bins, eliminar_descriptores)
+            histograms, vacios = get_Histograms(f, range_max, range_min, n_bins, eliminar_descriptores)
             lab = read_Labels(f+".labels")
 
-            if len(h) > len(lab):
-                lab = lab*(len(h)//len(lab))
+            if len(histograms) > len(lab):
+                lab = lab*(len(histograms)//len(lab))
 
             if eliminar_vacios:
                 for it in range(len(vacios)-1,0,-1):
-                    del h[vacios[it]]
+                    del histograms[vacios[it]]
                     del lab[vacios[it]]
             
-            histograms += h
+            total_histograms += histograms
             labels += lab
             
-    return np.array(histograms), np.array(labels)
+    return np.array(total_histograms), np.array(labels)

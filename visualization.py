@@ -1,4 +1,3 @@
-from utils import imgContains
 import numpy as np
 import cv2 as cv
 
@@ -9,8 +8,10 @@ def addDelaunayToImage(graph, img, color = (0,255,0), width = 1):
     for t in triangles:
         pt1 = (int(t[0]), int(t[1]))
         pt2 = (int(t[2]), int(t[3]))
-        if(imgContains(img,pt1) and imgContains(img,pt2)):
+        try:
             cv.line(img, pt1, pt2, color, width)
+        except:
+            pass
 
 def addTrayectoriesToImage(trayectories, img, color = (0,0,255), width = 1):
     for tracklet in trayectories:

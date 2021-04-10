@@ -2,18 +2,16 @@ import pickle
 import numba
 import numpy as np
 import cv2 as cv
-import time
 from sklearn.cluster import DBSCAN
 from collections import namedtuple
 from numba import jit
 from itertools import combinations
 
-from utils import imgContains
-from visualization import addPrediction
-from visualization import addDelaunayToImage
-from visualization import addClustersToImage
-
 ############# AUXILIARY FUNCTIONS #############
+
+@jit(nopython = True)
+def imgContains(img,pt):
+    return ( pt[0] >= 0 and pt[0] < img.shape[1] and pt[1] >= 0 and pt[1] < img.shape[0] )
 
 @jit(nopython = True)
 def direction(pt0,pt1):
@@ -133,7 +131,7 @@ def getClusters(features, mini = 2, e = 10):
 def calculateMovement(features, trayectories, min_motion, erase_slow = False, t1 = -6):
     velocity_x = np.zeros(len(trayectories),dtype = numba.float64)
     velocity_y = np.zeros(len(trayectories),dtype = numba.float64)
-    #velocity = velocity_x.copy()
+    #velocity = np.zeros(len(trayectories),dtype = numba.float64)
     for i in np.arange(len(trayectories)):
         velocity_x[i] = abs(trayectories[i][t1][0]-trayectories[i][-1][0])
         velocity_y[i] = abs(trayectories[i][t1][1]-trayectories[i][-1][1])
@@ -250,8 +248,8 @@ def calculateUniformity(cliques, clusters, features):
     intra_cluster = np.zeros(len(uniformity))
     total_sum = 0
 
-    # For every pair of point in each clique
-   
+    # For every pair of points in each clique
+    # the distance intra-cluster, inter-cluster and the total
     for f in np.arange(len(features)):
         
         total, intra, inter = auxUniformity(np.array(cliques[f]), features, f, clusters)
@@ -277,7 +275,7 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
     
     #Algorithm for feature detection
     if "use_sift" in others:
-        # SIFT
+        # SIFT (To limit the number of features detected)
         detector = cv.SIFT_create(nfeatures = others["use_sift"])
     else:
         # FAST
@@ -287,17 +285,20 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
     # The video feed is read in as a VideoCapture object
     cap = cv.VideoCapture(video_file)
 
-    if "num_frames" in others:
+    # How many frames will be used
+    if "num_frames" in others: 
         num_frames = others["num_frames"]+L
     else:
         num_frames = int(cap.get(cv.CAP_PROP_FRAME_COUNT))
 
+    # Skip the first frames of the video
     if "skip_frames" in others:
         for i in range(others["skip_frames"]):
             video_open, prev_frame = cap.read()
             
     video_open, prev_frame = cap.read()
 
+    # For datasets with variable resolutions
     if "change_resolution" in others:
         height = others["change_resolution"]
         prev_frame = cv.resize(prev_frame, (int((prev_frame.shape[1]/prev_frame.shape[0]) * height), height))
@@ -394,10 +395,6 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
                 #addCliqueToImage(cliques, -1, frame,trayectories)
                 #addClustersToImage(clusters,prev,frame)
 
-                # if model is not None:
-                #     frame = addPrediction(frame,model,
-                #                       (velocity_x, velocity_y, dir_var, stability, collectiveness, conflict, density, uniformity), range_max)
-
             else:
                 velocity_x = np.zeros(1)
                 velocity_y = np.zeros(1)
@@ -417,9 +414,10 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
         video_open, frame = cap.read()
         
         if video_open:
-            frame = cv.resize(frame, (int((frame.shape[1]/frame.shape[0]) * height), height))
+            if frame.shape[0] != height:
+                frame = cv.resize(frame, (int((frame.shape[1]/frame.shape[0]) * height), height))
             
-            # Calculates sparse optical flow by Lucas-Kanade method
+            # Sparse optical flow by Lucas-Kanade method
             # https://docs.opencv.org/3.0-beta/modules/video/doc/motion_analysis_and_object_tracking.html#calcopticalflowpyrlk
         
             if (it > L):

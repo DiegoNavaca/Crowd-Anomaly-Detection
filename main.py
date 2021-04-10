@@ -13,7 +13,7 @@ from files import get_Ground_Truth
 from models import train_and_Test
 
 def try_Dataset(dataset, descriptors_dir, video_dir, params, tam_test, verbose = 2, is_video_classification = False, skip_extraction = True):
-    np.random.seed(5)
+    np.random.seed(10)
     
     gt = get_Ground_Truth("Datasets/"+dataset+"/ground_truth.txt")
 
@@ -130,20 +130,18 @@ def try_CVD(params, verbose = 2, skip_extraction = True):
 ############################################################################
 
 if __name__ == "__main__":
-    for L in (5,10,15):
-        for fast_threshold in (7,10,20):
-            params_extraction = {"L":L, "t1":-5, "t2":1, "min_motion":0.025,
-                                 "fast_threshold":fast_threshold, "others":{}}
-            params_autoencoder = {"activation":"relu","dropout":0.15731506011875585,"batch_norm":True,'extra_class_layers': 4, 'extra_coder_layers': 2,'extra_decoder_layers': 0, "class_loss":"kl_divergence","classifier_act":"softmax", "epochs":100}
-            params_training = {"C":[32,64,128,217,256]}
-            #params_training = {"auto":[True]}
-            params = {"extraction":params_extraction, "autoencoder":params_autoencoder,
-                      "training":params_training, "bins":[50,100,128,150,200,256,300,350],"code_size":[50,100,150,200,25,300,350],
-                      "n_parts":1}
+    params_extraction = {"L":5, "t1":-5, "t2":1, "min_motion":0.025,
+                         "fast_threshold":10, "others":{}}
+    params_autoencoder = {"activation":"relu","dropout":0.15731506011875585,"batch_norm":True,'extra_class_layers': 4, 'extra_coder_layers': 2,'extra_decoder_layers': 0, "class_loss":"kl_divergence","classifier_act":"softmax", "epochs":100}
+    params_training = {"C":[16,32,64,128,217,256]}
+    #params_training = {"auto":[True]}
+    params = {"extraction":params_extraction, "autoencoder":params_autoencoder,
+              "training":params_training, "bins":[32,50,150,200,250],"code_size":[0.95],
+              "n_parts":1}
+    
 
-
-            #acc, auc, best_params = try_UMN(2,params, verbose = 3)
-            acc, auc, best_params = try_CVD(params, verbose = 1, skip_extraction = False)
+    #acc, auc, best_params = try_UMN(2,params, verbose = 3)
+    acc, auc, best_params = try_CVD(params, verbose = 3)
 
 
 ################################ Resultados ################################

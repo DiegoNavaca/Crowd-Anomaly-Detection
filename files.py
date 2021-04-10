@@ -76,7 +76,7 @@ def get_Ground_Truth(in_file):
         
     return gt
 
-# Separates the videos into their classes
+# Separates the videos into classes
 def get_Classes(in_file):
     f = open(in_file,"r")
     classes = {}
