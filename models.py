@@ -11,10 +11,17 @@ from sklearn.decomposition import PCA
 from keras.losses import MeanSquaredError
 from keras.metrics import BinaryAccuracy
 from keras.callbacks import EarlyStopping
+from keras.callbacks import LearningRateScheduler
 
 from autoencoders import Autoencoder
 from data import get_Range_Descriptors
 from data import prepare_Hist_and_Labels
+
+def squeduler(epoch, lr):
+    if epoch < 10:
+        return lr
+    else:
+        return lr * 0.9
 
 def train_and_Test(training, test, video_classification, params, verbose = 0):  
     acc_list = []
@@ -53,11 +60,12 @@ def train_and_Test(training, test, video_classification, params, verbose = 0):
                                     metrics = {"output_1":BinaryAccuracy(name='acc')})
 
                 ES = EarlyStopping(monitor = 'val_output_1_loss',
-                                            patience = 10, restore_best_weights = True)
+                                            patience = 20, restore_best_weights = True)
+                lrs = LearningRateScheduler(squeduler)
                 
                 history = autoencoder.fit(original_hist,{"output_2":original_hist,
-                                                         "output_1":labels},
-                                          verbose = 0, epochs = params["autoencoder"].get("epochs",20), validation_split = 0.2, callbacks = ES)
+                        "output_1":labels},verbose = 0, epochs = 100,
+                        validation_split = 0.2, callbacks = [ES,lrs])
                 if verbose > 0:
                     print("Autoencoder: ACCtrain: {:1.3f}\t ACCval {:1.3f}".format(
                         history.history['output_1_acc'][-1],history.history['val_output_1_acc'][-1]))

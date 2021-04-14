@@ -2,18 +2,16 @@ import glob
 import time
 import numpy as np
 
-from sklearn.metrics import confusion_matrix
 from math import ceil
 from operator import mul
 from functools import reduce
 
 from files import extract_Descriptors_Dir
 from files import get_Ground_Truth
-#from files import get_Classes
 from models import train_and_Test
 
 def try_Dataset(dataset, descriptors_dir, video_dir, params, tam_test, verbose = 2, is_video_classification = False, skip_extraction = True):
-    np.random.seed(10)
+    np.random.seed(5)
     
     gt = get_Ground_Truth("Datasets/"+dataset+"/ground_truth.txt")
 
@@ -132,11 +130,14 @@ def try_CVD(params, verbose = 2, skip_extraction = True):
 if __name__ == "__main__":
     params_extraction = {"L":5, "t1":-5, "t2":1, "min_motion":0.025,
                          "fast_threshold":10, "others":{}}
-    params_autoencoder = {"activation":"relu","dropout":0.15731506011875585,"batch_norm":True,'extra_class_layers': 4, 'extra_coder_layers': 2,'extra_decoder_layers': 0, "class_loss":"kl_divergence","classifier_act":"softmax", "epochs":100}
-    params_training = {"C":[16,32,64,128,217,256]}
+    params_autoencoder = {"activation":"relu","dropout":0.3,"batch_norm":True,
+                          'extra_class_layers': 1, 'extra_encoder_layers': 1,
+                          'extra_decoder_layers': 1, "class_loss":"kl_divergence",
+                          "classifier_act":"sigmoid"}
+    params_training = {"C":[1,2,4,8,16,32,64,128,256,512]}
     #params_training = {"auto":[True]}
     params = {"extraction":params_extraction, "autoencoder":params_autoencoder,
-              "training":params_training, "bins":[32,50,150,200,250],"code_size":[0.95],
+              "training":params_training, "bins":[180],"code_size":[100,150,200,250,300],
               "n_parts":1}
     
 
@@ -177,3 +178,7 @@ if __name__ == "__main__":
 # {'C': 217, 'autoencoder': 253, 'bins': 189, 'class_act': 'softmax', 'class_loss': 'kl_divergence',
 # 'dropout': 0.15731506011875585, 'epochs': 28, 'extra_class_layers': 4, 'extra_coder_layers': 2,
 # 'extra_decoder_layers': 0, 'n_video_parts': 1} 0.8897196137196136
+
+#Trial 207 value: 0.8916316756035055 and parameters: {'C': 129, 'bins': 304,
+#'autoencoder': 469, 'dropout': 0.2749704726448893, 'class_loss': 'kl_divergence',
+#'extra_encoder_layers': 1, 'extra_decoder_layers': 3, 'extra_class_layers': 4, 'n_video_parts': 1}.
