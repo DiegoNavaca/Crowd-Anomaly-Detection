@@ -60,7 +60,7 @@ def train_and_Test(training, test, video_classification, params, verbose = 0):
                                     metrics = {"output_1":BinaryAccuracy(name='acc')})
 
                 ES = EarlyStopping(monitor = 'val_output_1_loss',
-                                            patience = 20, restore_best_weights = True)
+                                            patience = 10, restore_best_weights = True)
                 lrs = LearningRateScheduler(squeduler)
                 
                 history = autoencoder.fit(original_hist,{"output_2":original_hist,
@@ -92,7 +92,10 @@ def train_and_Test(training, test, video_classification, params, verbose = 0):
                     prediction = [1 if p[0] > p[1] else -1 for p in prediction]
 
                 acc = accuracy_score(labels_test,prediction)
-                auc = roc_auc_score(labels_test,prediction)
+                try:
+                    auc = roc_auc_score(labels_test,prediction)
+                except:
+                    auc = acc
                 
                 params_list.append(dict({"n_bins":n_bins,"code_size":code_size},
                                         **model_params))

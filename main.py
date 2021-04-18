@@ -132,12 +132,11 @@ if __name__ == "__main__":
                          "fast_threshold":10, "others":{}}
     params_autoencoder = {"activation":"relu","dropout":0.3,"batch_norm":True,
                           'extra_class_layers': 1, 'extra_encoder_layers': 1,
-                          'extra_decoder_layers': 1, "class_loss":"kl_divergence",
-                          "classifier_act":"sigmoid"}
-    params_training = {"C":[1,2,4,8,16,32,64,128,256,512]}
-    #params_training = {"auto":[True]}
+                          'extra_decoder_layers': 1, "class_loss":"binary_crossentropy",
+                          "classifier_act":"softmax"}
+    params_training = {"C":[1,2,4,8,16,32,64,128,256]}
     params = {"extraction":params_extraction, "autoencoder":params_autoencoder,
-              "training":params_training, "bins":[180],"code_size":[100,150,200,250,300],
+              "training":params_training, "bins":[200],"code_size":[0.95],
               "n_parts":1}
     
 
@@ -171,14 +170,14 @@ if __name__ == "__main__":
 
 # CVD
 # {"L":5, "t1":-5, "t2":1, "min_motion":0.05, "fast_threshold":10, "others":{}} 
-# {'n_bins': 128, 'code_size': 0.95, 'C': 32}
-# Accuracy: 0.895
-# AUC: 0.896
+# {'n_bins': 128, 'code_size': 0.95}
+# Accuracy: 0.890
+# AUC: 0.890
 
-# {'C': 217, 'autoencoder': 253, 'bins': 189, 'class_act': 'softmax', 'class_loss': 'kl_divergence',
-# 'dropout': 0.15731506011875585, 'epochs': 28, 'extra_class_layers': 4, 'extra_coder_layers': 2,
-# 'extra_decoder_layers': 0, 'n_video_parts': 1} 0.8897196137196136
+# code_size: None
+# Accuracy: 0.862
+# AUC: 0.864
 
-#Trial 207 value: 0.8916316756035055 and parameters: {'C': 129, 'bins': 304,
-#'autoencoder': 469, 'dropout': 0.2749704726448893, 'class_loss': 'kl_divergence',
-#'extra_encoder_layers': 1, 'extra_decoder_layers': 3, 'extra_class_layers': 4, 'n_video_parts': 1}.
+# code_size: 250 bins: 150
+# Accuracy: 0.874
+# AUC: 0.873
