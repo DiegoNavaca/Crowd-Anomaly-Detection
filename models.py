@@ -10,6 +10,7 @@ from sklearn.decomposition import PCA
 
 from keras.losses import MeanSquaredError
 from keras.metrics import BinaryAccuracy
+from keras.metrics import AUC
 from keras.callbacks import EarlyStopping
 from keras.callbacks import LearningRateScheduler
 
@@ -45,6 +46,7 @@ def train_and_Test(training, test, video_classification, params, verbose = 0):
             # Use a PCA for dimensionality reduction
             elif code_size < 1.0:
                 pca = PCA(n_components=code_size)
+                #pca.fit([original_hist[i] for i in range(len(original_hist)) if original_labels[i] != -1])
                 pca.fit(original_hist)
                 hist = pca.transform(original_hist)
                 hist_test = pca.transform(original_test_hist)
@@ -57,7 +59,7 @@ def train_and_Test(training, test, video_classification, params, verbose = 0):
                 autoencoder.compile(optimizer = 'adam',
                                     loss = {"output_2":MeanSquaredError(),
                                             "output_1":class_loss},
-                                    metrics = {"output_1":BinaryAccuracy(name='acc')})
+                                    metrics = {"output_1":AUC(name='auc')})
 
                 ES = EarlyStopping(monitor = 'val_output_1_loss',
                                             patience = 10, restore_best_weights = True)
@@ -67,8 +69,8 @@ def train_and_Test(training, test, video_classification, params, verbose = 0):
                         "output_1":labels},verbose = 0, epochs = 100,
                         validation_split = 0.2, callbacks = [ES,lrs])
                 if verbose > 0:
-                    print("Autoencoder: ACCtrain: {:1.3f}\t ACCval {:1.3f}".format(
-                        history.history['output_1_acc'][-1],history.history['val_output_1_acc'][-1]))
+                    print("Autoencoder: AUCtrain: {:1.3f}\t AUCval {:1.3f}".format(
+                        history.history['output_1_auc'][-1],history.history['val_output_1_auc'][-1]))
                 hist = autoencoder.encoder.predict(original_hist)
                 hist_test = autoencoder.encoder.predict(original_test_hist)
 

@@ -128,44 +128,55 @@ def try_CVD(params, verbose = 2, skip_extraction = True):
 ############################################################################
 
 if __name__ == "__main__":
-    params_extraction = {"L":5, "t1":-5, "t2":1, "min_motion":0.025,
-                         "fast_threshold":10, "others":{}}
+    params_extraction = {"L":20, "t1":-3, "t2":1, "min_motion":0.05,
+                         "fast_threshold":20, "others":{}}
     params_autoencoder = {"activation":"relu","dropout":0.3,"batch_norm":True,
-                          'extra_class_layers': 1, 'extra_encoder_layers': 1,
-                          'extra_decoder_layers': 1, "class_loss":"binary_crossentropy",
+                          'extra_class_layers': 0, 'extra_encoder_layers': 1,
+                          'extra_decoder_layers': 1, "class_loss":"kl_divergence",
                           "classifier_act":"softmax"}
-    params_training = {"C":[1,2,4,8,16,32,64,128,256]}
+    params_training = {"C":[1,4,16,64]}
     params = {"extraction":params_extraction, "autoencoder":params_autoencoder,
-              "training":params_training, "bins":[200],"code_size":[0.95],
-              "n_parts":1}
+              "training":params_training, "bins":[16,32,64],
+              "code_size":[None], "n_parts":1}
     
 
-    #acc, auc, best_params = try_UMN(2,params, verbose = 3)
-    acc, auc, best_params = try_CVD(params, verbose = 3)
+    acc, auc, best_params = try_UMN(3,params, verbose = 3)
+    #acc, auc, best_params = try_CVD(params, verbose = 3)
 
 
 ################################ Resultados ################################
 
 # Escena 1
 # {'L': 15, 't1': -5, 't2': 1, 'min_motion': 0.025, 'fast_threshold': 20}
-# nu: 0.01
-# Accuracy: 0.992
-# AUC: 0.990
+# {'n_bins': 16, 'code_size': None, 'C': 4}
+# Accuracy: 0.988
+# AUC: 0.981
+# {'n_bins': 64, 'code_size': 0.95, 'C': 4}
+# Accuracy: 0.988
+# AUC: 0.971
+# {'n_bins': 200, 'code_size': 64, 'C': 64}
+# Accuracy: 0.979
+# AUC: 0.967
 
 # Escena 2
 # {"L":10, "t1":-5, "t2":1, "min_motion":0.025, "fast_threshold":10, "others":{}}
-# {'n_bins': 64, 'C': 64}
-# Accuracy: 0.954
-# AUC: 0.927
-
-# {'n_bins': 64, 'hidden_layer_sizes': (128, 32, 4), 'solver': 'adam', 'alpha': 0.0001}
-# Accuracy: 0.959
-# AUC: 0.935
+# {'n_bins': 64, 'code_size': None, 'C': 1}
+# Accuracy: 0.947
+# AUC: 0.918
+# {'n_bins': 128, 'code_size': 0.975, 'C': 1}
+# Accuracy: 0.949
+# AUC: 0.921
+# {'n_bins': 200, 'code_size': 128, 'C': 1}
+# Accuracy: 0.944
+# AUC: 0.922
 
 # Escena 3
 # {'L': 20, 't1': -3, 't2': 2, 'min_motion': 0.05, 'fast_threshold': 20}
-# nu: 0.01
-# Accuracy: 0.983
+# {'n_bins': 32, 'code_size': None, 'C': 1}
+# Accuracy: 0.984
+# AUC: 0.971
+# {'n_bins': 125, 'code_size': 0.95, 'C': 4} ft 10
+# Accuracy: 0.984
 # AUC: 0.973
 
 # CVD
@@ -179,5 +190,6 @@ if __name__ == "__main__":
 # AUC: 0.864
 
 # code_size: 250 bins: 150
-# Accuracy: 0.874
-# AUC: 0.873
+# Accuracy: 0.870
+# AUC: 0.870
+
