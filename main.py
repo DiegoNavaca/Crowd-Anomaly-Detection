@@ -128,20 +128,18 @@ def try_CVD(params, verbose = 2, skip_extraction = True):
 ############################################################################
 
 if __name__ == "__main__":
-    for umbral in (45,40,35,30,25,20,15,10,5):
-        params_extraction = {"L":10, "t1":-5, "t2":1, "min_motion":0.025,
-                         "fast_threshold":umbral, "others":{}}
-        params_autoencoder = {"activation":"relu","dropout":0.3,"batch_norm":True,
+    params_extraction = {'L': 20, 't1': -3, 't2': 2, 'min_motion': 0.05,
+                         "fast_threshold":20, "others":{}}
+    params_autoencoder = {"activation":"relu","dropout":0.3,"batch_norm":True,
                           'extra_class_layers': 0, 'extra_encoder_layers': 1,
                           'extra_decoder_layers': 1, "class_loss":"kl_divergence",
                           "classifier_act":"softmax"}
-        params_training = {"C":[1,4,16,64]}
-        params = {"extraction":params_extraction, "autoencoder":params_autoencoder,
-              "training":params_training, "bins":[16,32,64],
-              "code_size":[None], "n_parts":1}    
+    params_training = {"C":[1,4,16,64]}
+    params = {"extraction":params_extraction, "autoencoder":params_autoencoder,
+              "training":params_training, "bins":[200],
+              "code_size":[16], "n_parts":1}    
 
-        print("Umbral:",umbral)
-        acc, auc, best_params = try_UMN(2,params, verbose = 3, skip_extraction = False)
+    acc, auc, best_params = try_UMN(3,params, verbose = 3, skip_extraction = False)
     #acc, auc, best_params = try_CVD(params, verbose = 3)
 
 
@@ -150,8 +148,8 @@ if __name__ == "__main__":
 # Escena 1
 # {'L': 15, 't1': -5, 't2': 1, 'min_motion': 0.025, 'fast_threshold': 20}
 # {'n_bins': 16, 'code_size': None, 'C': 4}
-# Accuracy: 0.988
-# AUC: 0.981
+# Accuracy: 0.99
+# AUC: 0.987
 # {'n_bins': 64, 'code_size': 0.95, 'C': 4}
 # Accuracy: 0.988
 # AUC: 0.971
@@ -197,18 +195,21 @@ if __name__ == "__main__":
 # 35, 0.940, 0.915, 142.8, 28.8
 # 30, 0.933, 0.905, 166.2, 24.8
 # 25, 0.930, 0.904, 197.5
-# 20, 0.936, 0.902, 242.7
+# 20, 0.940, 0.905, 242.7
 # 15, 0.930,0.893, 311.8
 # 10, 0.947, 0.918, 428.7
 
 # Escena 3
 # {'L': 20, 't1': -3, 't2': 2, 'min_motion': 0.05, 'fast_threshold': 20}
 # {'n_bins': 32, 'code_size': None, 'C': 1}
-# Accuracy: 0.984
-# AUC: 0.971
-# {'n_bins': 125, 'code_size': 0.95, 'C': 4} ft 10
-# Accuracy: 0.984
+# Accuracy: 0.987
 # AUC: 0.973
+# {'n_bins': 100, 'code_size': 0.95, 'C': 1} 
+# Accuracy: 0.986
+# AUC: 0.972
+# {'n_bins': 200, 'code_size': 16, 'C': 1}
+# Accuracy: 0.984
+# AUC: 0.984
 
 # Nº frames: 654, 672, 804 = 2130
 # Umbral, ACC, AUC, T. medio, fps

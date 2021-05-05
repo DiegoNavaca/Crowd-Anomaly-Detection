@@ -16,7 +16,9 @@ def imgContains(img,pt):
 @jit(nopython = True)
 def direction(pt0,pt1):
     dif = pt0-pt1
-    return np.arctan2(dif[1],dif[0])
+    if dif[0] == 0:
+        return np.pi/2
+    return np.arctan(dif[1]/dif[0])
 
 @jit(nopython = True)
 def difAng(v0,v1):
@@ -168,12 +170,16 @@ def calculateStability(cliques, trayectories, t2 = 1):
     stability = np.zeros(len(trayectories))
     # For every tracklet
     for i in np.arange(len(trayectories)):
-        # We calculate  the change of size and shape of all the posible triangles in the clique 
+        # We calculate  the change of size and shape of all the posible triangles in the clique
+        contador = 0
         for pair in combinations(cliques[i],2):
-            old_triangle = (trayectories[i][t2],trayectories[pair[0]][-1-t2], trayectories[pair[1]][-1-t2])
-            new_triangle = (trayectories[i][-1],trayectories[pair[0]][-1], trayectories[pair[1]][-1])
-            stability[i] += distanceTriangles(old_triangle, new_triangle)
-        stability[i] = stability[i] / (len(cliques[i])+1)
+            if pair[0] in cliques[pair[1]]:
+                contador += 1
+                old_triangle = (trayectories[i][t2],trayectories[pair[0]][-1-t2], trayectories[pair[1]][-1-t2])
+                new_triangle = (trayectories[i][-1],trayectories[pair[0]][-1], trayectories[pair[1]][-1])
+                stability[i] += distanceTriangles(old_triangle, new_triangle)
+        if contador != 0:
+            stability[i] = stability[i] / contador
 
     return stability
 
