@@ -128,19 +128,20 @@ def try_CVD(params, verbose = 2, skip_extraction = True):
 ############################################################################
 
 if __name__ == "__main__":
-    params_extraction = {'L': 20, 't1': -3, 't2': 2, 'min_motion': 0.05,
-                         "fast_threshold":20, "others":{}}
+    params_extraction = {"L":5, "t1":-5, "t2":1, "min_motion":0.05,
+                         "fast_threshold":10, "others":{}}
     params_autoencoder = {"activation":"relu","dropout":0.3,"batch_norm":True,
                           'extra_class_layers': 0, 'extra_encoder_layers': 1,
                           'extra_decoder_layers': 1, "class_loss":"kl_divergence",
                           "classifier_act":"softmax"}
     params_training = {"C":[1,4,16,64]}
     params = {"extraction":params_extraction, "autoencoder":params_autoencoder,
-              "training":params_training, "bins":[200],
-              "code_size":[16], "n_parts":1}    
+              "training":params_training, "bins":[16,32,64],
+              "code_size":[None], "n_parts":1}    
 
-    acc, auc, best_params = try_UMN(3,params, verbose = 3, skip_extraction = False)
-    #acc, auc, best_params = try_CVD(params, verbose = 3)
+    #print("Umbral:",f)
+    #acc, auc, best_params = try_UMN(3,params, verbose = 3, skip_extraction = False)
+    acc, auc, best_params = try_CVD(params, verbose = 3, skip_extraction = False)
 
 
 ################################ Resultados ################################
@@ -157,16 +158,16 @@ if __name__ == "__main__":
 # Accuracy: 0.979
 # AUC: 0.967
 
-# Nº frames: 622, 825
+# Nº frames: 622, 825 = 1447
 # Umbral, ACC, AUC, T. medio, fps
-# 5, 0.983, 0.959, 380.7, 3.8
-# 10, 0.990, 0.981, 262.9, 5.5
-# 15, 0.991, 0.985, 168.4, 8.5
-# 20, 0.988, 0.981, 121.9, 11.8
-# 25, 0.991, 0.984, 96.0, 15.0
-# 30, 0.989, 0.979, 83.1, 17.4
-# 35, 0.988, 0.974, 74.2, 19.5
-# 40, 0.988, 0.965, 61.5, 23.5
+# 5, 0.982, 0.962, 318.0, 4.5
+# 10, 0.987, 0.974, 220.1, 6.5
+# 15, 0.994, 0.989, 139.7, 10.3
+# 20, 0.992, 0.984, 101.6, 14.2
+# 25, 0.991, 0.983, 79.5, 18.2
+# 30, 0.987, 0.974, 68.8, 21.0
+# 35, 0.988, 0.972, 59.7, 24.2
+# 40, 0.978, 0.949, 48.8, 29.65
 
 # Con blur (3,3)
 # Umbral, ACC, AUC, T. medio
@@ -190,14 +191,14 @@ if __name__ == "__main__":
 
 # Nº frames: 546, 681, 765, 576, 891, 666 = 4125
 # Umbral, ACC, AUC, T. medio, fps
-# 45, 0.938, 0.902, 121.892, 33.8
-# 40, 0.938, 0.914, 127.6, 32.3
-# 35, 0.940, 0.915, 142.8, 28.8
-# 30, 0.933, 0.905, 166.2, 24.8
-# 25, 0.930, 0.904, 197.5
-# 20, 0.940, 0.905, 242.7
-# 15, 0.930,0.893, 311.8
-# 10, 0.947, 0.918, 428.7
+# 45, 0.938, 0.902, , 
+# 40, 0.938, 0.914, , 
+# 35, 0.940, 0.915, , 
+# 30, 0.933, 0.905, , 
+# 25, 0.930, 0.904, 
+# 20, 0.940, 0.905, 
+# 15, 0.930,0.893, 
+# 10, 0.947, 0.918, 
 
 # Escena 3
 # {'L': 20, 't1': -3, 't2': 2, 'min_motion': 0.05, 'fast_threshold': 20}
@@ -213,28 +214,31 @@ if __name__ == "__main__":
 
 # Nº frames: 654, 672, 804 = 2130
 # Umbral, ACC, AUC, T. medio, fps
-# 5, 0.984, 0.970, 612.8, 3.4
-# 10, 0.984, 0.971, 421.3, 5.1
-# 15, 0.986, 0.971, 325.7, 6.5
-# 20, 0.986, 0.972, 266.7, 8.0
-# 25, 0.983, 0.970, 228.8, 9.3
-# 30, 0.989, 0.972, 191,7, 11.1
-# 35, 0.987, 0.971, 166,7, 12.7
-# 40, 0.990, 0.969, 140.6, 15.1
-# 45, 0.986, 0.943, 129.4, 16.4
-# 50, 0.984, 0.936, 107.7, 19.7
+# 5, 0.984, 0.971, 453.3, 4.7
+# 10, 0.985, 0.971, 312.5, 6.8
+# 15, 0.986, 0.971, 235.7, 9.0
+# 20, 0.987, 0.973, 195.0, 
+# 25, 0.983, 0.970, , 
+# 30, 0.989, 0.972, , 
+# 35, 0.987, 0.971, , 
+# 40, 0.990, 0.969, , 
+# 45, 0.986, 0.943, , 
+# 50, 0.984, 0.936, , 
 
 # CVD
 # {"L":5, "t1":-5, "t2":1, "min_motion":0.05, "fast_threshold":10, "others":{}} 
+# {code_size: None, n_bins = 64}
+# Accuracy: 0.862
+# AUC: 0.864
+
 # {'n_bins': 128, 'code_size': 0.95}
 # Accuracy: 0.890
 # AUC: 0.890
-
-# code_size: None
-# Accuracy: 0.862
-# AUC: 0.864
 
 # code_size: 250 bins: 150
 # Accuracy: 0.870
 # AUC: 0.870
 
+# Nº frames: 3.6*30*246 = 26568
+# Umbral, ACC, AUC, T. medio, fps
+# 20, 0.861, 0.866, 2140.8, 12.4
