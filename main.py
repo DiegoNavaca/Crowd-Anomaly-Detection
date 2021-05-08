@@ -134,14 +134,14 @@ if __name__ == "__main__":
                           'extra_class_layers': 0, 'extra_encoder_layers': 1,
                           'extra_decoder_layers': 1, "class_loss":"kl_divergence",
                           "classifier_act":"softmax"}
-    params_training = {"C":[1,4,16,64]}
+    params_training = {"C":[1,4,16,64,128,256]}
     params = {"extraction":params_extraction, "autoencoder":params_autoencoder,
-              "training":params_training, "bins":[16,32,64],
-              "code_size":[None], "n_parts":1}    
+              "training":params_training, "bins":[200,250],
+              "code_size":[64,100,150], "n_parts":1}    
 
     #print("Umbral:",f)
     #acc, auc, best_params = try_UMN(3,params, verbose = 3, skip_extraction = False)
-    acc, auc, best_params = try_CVD(params, verbose = 3, skip_extraction = False)
+    acc, auc, best_params = try_CVD(params, verbose = 3, skip_extraction = True)
 
 
 ################################ Resultados ################################
@@ -217,7 +217,7 @@ if __name__ == "__main__":
 # 5, 0.984, 0.971, 453.3, 4.7
 # 10, 0.985, 0.971, 312.5, 6.8
 # 15, 0.986, 0.971, 235.7, 9.0
-# 20, 0.987, 0.973, 195.0, 
+# 20, 0.987, 0.973, 195.0, 11.2
 # 25, 0.983, 0.970, , 
 # 30, 0.989, 0.972, , 
 # 35, 0.987, 0.971, , 
@@ -229,11 +229,11 @@ if __name__ == "__main__":
 # {"L":5, "t1":-5, "t2":1, "min_motion":0.05, "fast_threshold":10, "others":{}} 
 # {code_size: None, n_bins = 64}
 # Accuracy: 0.862
-# AUC: 0.864
+# AUC: 0.867
 
 # {'n_bins': 128, 'code_size': 0.95}
-# Accuracy: 0.890
-# AUC: 0.890
+# Accuracy: 0.894
+# AUC: 0.898
 
 # code_size: 250 bins: 150
 # Accuracy: 0.870
@@ -242,3 +242,4 @@ if __name__ == "__main__":
 # Nº frames: 3.6*30*246 = 26568
 # Umbral, ACC, AUC, T. medio, fps
 # 20, 0.861, 0.866, 2140.8, 12.4
+# 10, 0.862, 0.867, 3810.5, 7
