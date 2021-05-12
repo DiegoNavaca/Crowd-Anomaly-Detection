@@ -5,6 +5,7 @@ import numpy as np
 from math import ceil
 from operator import mul
 from functools import reduce
+from json import load
 
 from files import extract_Descriptors_Dir
 from files import get_Ground_Truth
@@ -75,6 +76,11 @@ def try_UMN(escena, params, verbose = 2, skip_extraction = True):
     descriptors_dir = "Descriptors/UMN/Escena "+str(escena)+"/"
     video_dir = "Datasets/UMN/Escenas Completas/Escena "+str(escena)+"/"
 
+    if params["extraction"] is None:
+        conf = open("config.json")
+        params["extraction"] = load(conf)["UMN"+str(escena)]
+        conf.close()
+
     acc, auc, best_params = try_Dataset("UMN", descriptors_dir, video_dir, params,
                                         1, verbose-1, skip_extraction = skip_extraction)
 
@@ -90,7 +96,10 @@ def try_CVD(params, verbose = 2, skip_extraction = True):
     descriptors_dir = "Descriptors/CVD/"
     video_dir = "Datasets/Crowd Violence Detection/"
 
-    #params["use_sift"] = 2000
+    if params["extraction"] is None:
+        conf = open("config.json")
+        params["extraction"] = load(conf)["CVD"]
+        conf.close()
 
     acc, auc, best_params = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir, params, 50, verbose-1, is_video_classification = True, skip_extraction = skip_extraction)
 
@@ -128,20 +137,18 @@ def try_CVD(params, verbose = 2, skip_extraction = True):
 ############################################################################
 
 if __name__ == "__main__":
-    params_extraction = {"L":5, "t1":-5, "t2":1, "min_motion":0.05,
-                         "fast_threshold":10, "others":{}}
+    params_extraction = None
     params_autoencoder = {"activation":"relu","dropout":0.3,"batch_norm":True,
-                          'extra_class_layers': 0, 'extra_encoder_layers': 1,
-                          'extra_decoder_layers': 1, "class_loss":"kl_divergence",
-                          "classifier_act":"softmax"}
-    params_training = {"C":[1,4,16,64,128,256]}
+                    'extra_class_layers': 0, 'extra_encoder_layers': 1,
+                    'extra_decoder_layers': 1, "class_loss":"kl_divergence",
+                    "classifier_act":"softmax"}
+    params_training = {"C":[1,4,16,32,64,128]}
     params = {"extraction":params_extraction, "autoencoder":params_autoencoder,
-              "training":params_training, "bins":[200,250],
-              "code_size":[64,100,150], "n_parts":1}    
+              "training":params_training, "bins":[200],
+              "code_size":[125], "n_parts":1}    
 
-    #print("Umbral:",f)
-    #acc, auc, best_params = try_UMN(3,params, verbose = 3, skip_extraction = False)
-    acc, auc, best_params = try_CVD(params, verbose = 3, skip_extraction = True)
+    acc, auc, best_params = try_UMN(2,params, verbose = 2, skip_extraction = True)
+    #acc, auc, best_params = try_CVD(params, verbose = 3, skip_extraction = True)
 
 
 ################################ Resultados ################################
@@ -159,7 +166,7 @@ if __name__ == "__main__":
 # AUC: 0.967
 
 # Nº frames: 622, 825 = 1447
-# Umbral, ACC, AUC, T. medio, fps
+# Umbral, ACC, AUC, Tiempo, fps
 # 5, 0.982, 0.962, 318.0, 4.5
 # 10, 0.987, 0.974, 220.1, 6.5
 # 15, 0.994, 0.989, 139.7, 10.3
@@ -169,39 +176,33 @@ if __name__ == "__main__":
 # 35, 0.988, 0.972, 59.7, 24.2
 # 40, 0.978, 0.949, 48.8, 29.65
 
-# Con blur (3,3)
-# Umbral, ACC, AUC, T. medio
-# 5, 0.992, 0.985, 192.3
-# 10, 0.989, 0.972, 118.3
-# 15, 0.986, 0.969, 81.1
-# 20, 0.982, 0.958, 64.2
-# 25, 0.977, 0.942, 47.2
-
 # Escena 2
-# {"L":10, "t1":-5, "t2":1, "min_motion":0.025, "fast_threshold":10, "others":{}}
+# {"L":10, "t1":-5, "t2":1, "min_motion":0.01, "fast_threshold":10, "others":{}}
 # {'n_bins': 64, 'code_size': None, 'C': 1}
-# Accuracy: 0.947
-# AUC: 0.918
-# {'n_bins': 128, 'code_size': 0.975, 'C': 1}
-# Accuracy: 0.949
-# AUC: 0.921
+# Accuracy: 0.961
+# AUC: 0.943
+# {'n_bins': 128, 'code_size': 0.95, 'C': 1}
+# Accuracy: 0.952
+# AUC: 0.944
 # {'n_bins': 200, 'code_size': 128, 'C': 1}
-# Accuracy: 0.944
-# AUC: 0.922
+# Accuracy: 0.957
+# AUC: 0.946
 
 # Nº frames: 546, 681, 765, 576, 891, 666 = 4125
-# Umbral, ACC, AUC, T. medio, fps
-# 45, 0.938, 0.902, , 
-# 40, 0.938, 0.914, , 
-# 35, 0.940, 0.915, , 
-# 30, 0.933, 0.905, , 
-# 25, 0.930, 0.904, 
-# 20, 0.940, 0.905, 
-# 15, 0.930,0.893, 
-# 10, 0.947, 0.918, 
+# Umbral, ACC, AUC, Tiempo, fps
+# 1, 0.939, 0.931, 852.1, 4.8
+# 2, 0.959, 0.947, 771.4, 5.3
+# 5, 0.949, 0.929, 553.15, 7.5
+# 10, 0.943, 0.913, 338.848, 12.1
+# 15, 0.933, 0.897, 252.0, 16.3
+# 20, 0.936, 0.905, 187.7, 22
+# 25, 0.933, 0.901, 153.4, 26.9
+# 30, 0.936, 0.907, 129.2, 32
+# 35, 0.938,0.912, 110.7, 37.2
+# 40, 0.936, 0.905, 96, 43
 
 # Escena 3
-# {'L': 20, 't1': -3, 't2': 2, 'min_motion': 0.05, 'fast_threshold': 20}
+# {'L': 20, 't1': -5, 't2': 1, 'min_motion': 0.05, 'fast_threshold': 20}
 # {'n_bins': 32, 'code_size': None, 'C': 1}
 # Accuracy: 0.987
 # AUC: 0.973
@@ -213,17 +214,17 @@ if __name__ == "__main__":
 # AUC: 0.984
 
 # Nº frames: 654, 672, 804 = 2130
-# Umbral, ACC, AUC, T. medio, fps
+# Umbral, ACC, AUC, Tiempo, fps
 # 5, 0.984, 0.971, 453.3, 4.7
 # 10, 0.985, 0.971, 312.5, 6.8
 # 15, 0.986, 0.971, 235.7, 9.0
 # 20, 0.987, 0.973, 195.0, 11.2
-# 25, 0.983, 0.970, , 
-# 30, 0.989, 0.972, , 
-# 35, 0.987, 0.971, , 
-# 40, 0.990, 0.969, , 
-# 45, 0.986, 0.943, , 
-# 50, 0.984, 0.936, , 
+# 25, 0.983, 0.970, 164.2, 13.0
+# 30, 0.989, 0.972, 140.1, 15.2
+# 35, 0.987, 0.971, 120.4, 17.7
+# 40, 0.987, 0.966, 103.7, 20.5
+# 45, 0.985, 0.943, 94.8, 22.5
+# 50, 0.977, 0.930, 84, 25.4
 
 # CVD
 # {"L":5, "t1":-5, "t2":1, "min_motion":0.05, "fast_threshold":10, "others":{}} 
@@ -240,6 +241,5 @@ if __name__ == "__main__":
 # AUC: 0.870
 
 # Nº frames: 3.6*30*246 = 26568
-# Umbral, ACC, AUC, T. medio, fps
-# 20, 0.861, 0.866, 2140.8, 12.4
+# Umbral, ACC, AUC, Tiempo, fps
 # 10, 0.862, 0.867, 3810.5, 7
