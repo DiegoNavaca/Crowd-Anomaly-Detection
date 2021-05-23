@@ -144,10 +144,10 @@ if __name__ == "__main__":
                     "classifier_act":"softmax"}
     params_training = {"C":[1,4,16,32,64,128]}
     params = {"extraction":params_extraction, "autoencoder":params_autoencoder,
-              "training":params_training, "bins":[200],
-              "code_size":[125], "n_parts":1}    
+              "training":params_training, "bins":[16],
+              "code_size":[None], "n_parts":1}    
 
-    acc, auc, best_params = try_UMN(2,params, verbose = 2, skip_extraction = True)
+    acc, auc, best_params = try_UMN(3,params, verbose = 2, skip_extraction = False)
     #acc, auc, best_params = try_CVD(params, verbose = 3, skip_extraction = True)
 
 

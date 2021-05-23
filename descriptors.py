@@ -6,12 +6,13 @@ from sklearn.cluster import DBSCAN
 from collections import namedtuple
 from numba import jit
 from itertools import combinations
+import visualization
 
 ############# AUXILIARY FUNCTIONS #############
 
 @jit(nopython = True)
 def imgContains(img,pt):
-    return ( pt[0] >= 0 and pt[0] < img.shape[1] and pt[1] >= 0 and pt[1] < img.shape[0] )
+    return ( pt[0] > 0 and pt[0] < img.shape[1] and pt[1] > 0 and pt[1] < img.shape[0])
 
 @jit(nopython = True)
 def direction(pt0,pt1):
@@ -396,10 +397,10 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
                 uniformity = calculateUniformity(cliques, clusters, prev)
                     
                 # Image representation for visualizing results
-                #addTrayectoriesToImage(trayectories,frame)
-                #addDelaunayToImage(delaunay,frame)
-                #addCliqueToImage(cliques, -1, frame,trayectories)
-                #addClustersToImage(clusters,prev,frame)
+                #visualization.addTrayectoriesToImage(trayectories,frame)
+                visualization.addDelaunayToImage(delaunay,frame)
+                visualization.addCliqueToImage(cliques, -1, frame,trayectories)
+                #visualization.addClustersToImage(clusters,prev,frame)
 
             else:
                 velocity_x = np.zeros(1)
@@ -415,7 +416,7 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
             descriptores = [velocity_x, velocity_y, dir_var, stability, collectiveness, conflict, density, uniformity]
             pickle.dump(descriptores, data_file)
 
-            #cv.imshow("Crowd", frame)            
+            cv.imshow("Crowd", frame)            
 
         video_open, frame = cap.read()
         
@@ -477,9 +478,9 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
             except:
                 pass
     
-    # Frames are read by intervals of 1 milliseconds. The function ends after the user presses the 'q' key
-        #if cv.waitKey(1) & 0xFF == ord('q'):
-        #   break
+        # Frames are read by intervals of 1 milliseconds. The function ends after the user presses the 'q' key
+        if cv.waitKey(1) & 0xFF == ord('q'):
+            break
 
     # The following frees up resources and closes all windows
     cap.release()
