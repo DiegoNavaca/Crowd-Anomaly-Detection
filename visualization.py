@@ -4,7 +4,7 @@ import cv2 as cv
 ########### IMAGE VISUALIZATION ###########
 
 def imgContains(img,pt):
-    return ( pt[0] > 0 and pt[0] < img.shape[1] and pt[1] > 0 and pt[1] < img.shape[0])
+    return (pt[0] > 0 and pt[0] < img.shape[1] and pt[1] > 0 and pt[1] < img.shape[0])
 
 def addDelaunayToImage(graph, img, color = (0,255,0), width = 1):
     triangles = graph.getEdgeList()
@@ -13,8 +13,6 @@ def addDelaunayToImage(graph, img, color = (0,255,0), width = 1):
         pt2 = (int(t[2]), int(t[3]))
         if(imgContains(img,pt1) and imgContains(img,pt2)):
             cv.line(img, pt1, pt2, color, width)
-
-
 
 def addTrayectoriesToImage(trayectories, img, color = (0,0,255), width = 1):
     for tracklet in trayectories:

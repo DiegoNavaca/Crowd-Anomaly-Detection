@@ -110,27 +110,6 @@ def try_CVD(params, verbose = 2, skip_extraction = True):
         print("AUC: {:1.3f}".format(auc))
     
     return acc, auc, best_params
-    
-######################################################################
-
-# def try_CUHK(params, verbose = 2):
-#     descriptors_dir = "Descriptors/CUHK/"
-#     video_dir = "Datasets/CUHK/Videos/"
-
-#     #params["others"]["skip_to_middle"] = True
-#     params["others"]["skip_frames"] = 1
-#     params["others"]["num_frames"] = 1
-#     params["others"]["change_resolution"] = 320
-
-#     acc, conf_mat, C, n_bins = try_Multiclass("CUHK", descriptors_dir, video_dir, params, 25, verbose, remove_same_scenes = False, C_vals = (8,16,32,64,128))
-
-#     if verbose > 0
-#         print("RESULTADOS:")
-#         print("C: {}\tNº bins: {}".format(C,n_bins))
-#         print("Accuracy: {:1.3f}".format(acc))
-#         print("{}".format(conf_mat)) # row: class   column: prediction
-    
-#     return acc, conf_mat, C, n_bins
 
 ############################################################################
 
