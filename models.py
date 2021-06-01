@@ -1,182 +1,134 @@
 import joblib
-import pickle
 import numpy as np
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import roc_auc_score
 from sklearn.svm import OneClassSVM
 from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
-from sklearn.model_selection import GridSearchCV
-
-from files import read_Labels
-
-def get_Range_Descriptors(files, is_video_classification, n_descriptors = 8):
-    # Max value of every descriptor on training
-    maximos = np.zeros(n_descriptors)
-    for des_file in files:
-        labels = read_Labels(des_file+".labels")
-
-        f = open(des_file+".data","rb")
-        k = 0
-        while True:
-            try:
-                descriptores = pickle.load(f)
-
-                if is_video_classification:
-                    label = labels[0]
-                else:
-                    label = labels[k]
-
-                # Anomaly values aren't taken into account
-                if label != -1:
-                    for i, d in enumerate(descriptores):
-                        # We use percentile to remove the outliers
-                        aux = np.percentile(d,95)
-                    
-                        if aux > maximos[i]:
-                            maximos[i] = aux
-
-                k += 1
-
-            except EOFError:
-                break
-    
-        f.close()
-
-    return maximos, np.zeros(n_descriptors)
-
-# Function to get the normalized histograms of a set of descriptors
-def get_Histograms(des_file, range_max, range_min, n_bins, eliminar_descriptores):
-    
-    f = open(des_file+".data", "rb")
-    histograms = [[] for i in np.arange(len(range_max))]
-    vacios = []
-    k = 0
-    while True:
-        try:
-            descriptores = pickle.load(f)
-            if len(descriptores[0]) > 1:
-                for i, d in enumerate(descriptores):
-                    
-                    if i in eliminar_descriptores:
-                        h = np.zeros(n_bins)
-                    else:
-                        h = np.histogram(d, bins = n_bins, range = (range_min[i],range_max[i]))[0]
-                        
-                    norm = np.linalg.norm(h)
-                    
-                    if norm != 0:
-                        histograms[i].append(h/norm)
-                    else:
-                        histograms[i].append(h)
-                        
-            else:
-                for i in range(len(descriptores)):
-                    histograms[i].append(np.zeros(n_bins))
-                vacios.append(k)
-
-            k += 1
-                
-        except EOFError:
-            break
-
-    f.close()
-
-    histograms = [np.concatenate(x) for x in zip(*histograms)]
-        
-    return histograms, vacios
-
-def prepare_Hist_and_Labels(files, range_max,range_min, is_video_classification, n_bins, eliminar_descriptores, eliminar_vacios =False):
-    histograms = []
-    labels = []
-    
-    for f in files:
-        if is_video_classification:
-            h, vacios = get_Histograms(f, range_max, range_min, n_bins, eliminar_descriptores)
-
-            # We remove frames without information to get a more reliable average
-            for i in range(len(vacios)-1,0,-1):
-                del h[vacios[i]] 
-
-            # The values of the video are the average of the values in all frames
-            h = [sum(x)/len(x) for x in zip(*h)]
-            
-            if len(h) != 0:
-                histograms.append(h)
-            
-                labels += read_Labels(f+".labels")
-            
-        else:
-            h, vacios = get_Histograms(f, range_max, range_min, n_bins, eliminar_descriptores)
-            lab = read_Labels(f+".labels")
-
-            if eliminar_vacios:
-                for it in range(len(vacios)-1,0,-1):
-                    del h[vacios[it]]
-                    del lab[vacios[it]]
-            
-            histograms += h
-            labels += lab
-            
-            
-
-    return histograms, labels
-
 from itertools import product
+from sklearn.decomposition import PCA
 
-def train_and_Test(training, test, video_classification, params_training, bins_vals, eliminar_descriptores = [7]):    
+from keras.losses import MeanSquaredError
+from keras.metrics import BinaryAccuracy
+from keras.metrics import AUC
+from keras.callbacks import EarlyStopping
+from keras.callbacks import LearningRateScheduler
+
+from autoencoders import Autoencoder
+from data import get_Range_Descriptors
+from data import prepare_Hist_and_Labels
+
+def squeduler(epoch, lr):
+    if epoch < 10:
+        return lr
+    else:
+        return lr * 0.9
+
+def train_and_Test(training, test, video_classification, params, verbose = 0):  
     acc_list = []
     auc_list = []
     params_list = []
 
     range_max, range_min = get_Range_Descriptors(training, video_classification)
 
-    for n_bins in bins_vals:
-        hist, labels = prepare_Hist_and_Labels(training, range_max,range_min,
-                                               video_classification, n_bins, eliminar_descriptores, eliminar_vacios = True)
-        hist_test, labels_test = prepare_Hist_and_Labels(test, range_max,range_min,
-                                                         video_classification, n_bins, eliminar_descriptores)
+    for n_bins in params["bins"]:
+        original_hist, original_labels = prepare_Hist_and_Labels(training, range_max,range_min, video_classification, n_bins, params.get("eliminar_descriptores",[]), eliminar_vacios = True, n_parts = params["n_parts"])
+        
+        original_test_hist, labels_test = prepare_Hist_and_Labels(test, range_max,range_min,video_classification, n_bins, params.get("eliminar_descriptores",[]), n_parts = params["n_parts"])
 
-        if "hidden_layer_sizes" in params_training:
-            keys, values = zip(*params_training.items())
-            permutations_dicts = [dict(zip(keys, v)) for v in product(*values)]
-            for params in permutations_dicts:
-                model = train_Network(hist, labels, params)
+        for code_size in params["code_size"]:
 
-                prediction = test_model(hist_test, model, video_classification)
+            # Keep size of the features
+            if code_size is None:
+                hist = original_hist.copy()
+                hist_test = original_test_hist.copy()
 
-                acc_list.append(accuracy_score(labels_test,prediction))
-                params_list.append(dict({"n_bins":n_bins},**params))
-                try:
-                    auc_list.append(roc_auc_score(labels_test,prediction))
-                except:
-                    pass
+            # Use a PCA for dimensionality reduction
+            elif code_size < 1.0:
+                pca = PCA(n_components=code_size)
+                #pca.fit([original_hist[i] for i in range(len(original_hist)) if original_labels[i] != -1])
+                pca.fit(original_hist)
+                hist = pca.transform(original_hist)
+                hist_test = pca.transform(original_test_hist)
+
+            # Use an autoencoder for dimensionality reduction
+            else:
+                labels = np.array([[1,0] if label == 1 else [0,1] for label in original_labels])
+                autoencoder = Autoencoder(len(original_hist[0]), code_size, params["autoencoder"])
+                class_loss = params["autoencoder"]["class_loss"]
+                autoencoder.compile(optimizer = 'adam',
+                                    loss = {"output_2":MeanSquaredError(),
+                                            "output_1":class_loss},
+                                    metrics = {"output_1":AUC(name='auc')})
+
+                ES = EarlyStopping(monitor = 'val_output_1_loss',
+                                            patience = 10, restore_best_weights = True)
+                lrs = LearningRateScheduler(squeduler)
+                
+                history = autoencoder.fit(original_hist,{"output_2":original_hist,
+                        "output_1":labels},verbose = 0, epochs = 100,
+                        validation_split = 0.2, callbacks = [ES,lrs])
+                if verbose > 0:
+                    print("Autoencoder: AUCtrain: {:1.3f}\t AUCval {:1.3f}".format(
+                        history.history['output_1_auc'][-1],history.history['val_output_1_auc'][-1]))
+                hist = autoencoder.encoder.predict(original_hist)
+                hist_test = autoencoder.encoder.predict(original_test_hist)
+
+            keys, values = zip(*params["training"].items())
+            param_permutations = [dict(zip(keys, v)) for v in product(*values)]
+
+            for model_params in param_permutations:
+                if "auto" in params["training"]:
+                    model = autoencoder.classifier_model
+                elif "C" in params["training"]:
+                    model = train_SVC(hist,original_labels, model_params)
+                elif "OC" in params["training"]:
+                    model = train_OC_SVM(hist,model_params)
+                elif "hidden_layer_sizes" in params["training"]:
+                    model = train_Network(hist, original_labels, model_params)
+                elif "n_estimators" in params["training"]:
+                    model = train_RF(hist,original_labels, model_params)
             
-        elif "C" in params_training:
-            for C in params_training["C"]:
-                model = train_SVC(hist,labels,C)
-
                 prediction = test_model(hist_test, model, video_classification)
+                if "auto" in params["training"]:
+                    prediction = [1 if p[0] > p[1] else -1 for p in prediction]
 
-                acc_list.append(accuracy_score(labels_test,prediction))
-                params_list.append({"n_bins":n_bins,"C":C})
+                acc = accuracy_score(labels_test,prediction)
                 try:
-                    auc_list.append(roc_auc_score(labels_test,prediction))
+                    auc = roc_auc_score(labels_test,prediction)
                 except:
-                    pass
+                    auc = acc
+                
+                params_list.append(dict({"n_bins":n_bins,"code_size":code_size},
+                                        **model_params))
+                
+                acc_list.append(acc)
+                auc_list.append(auc)
+                    
+                if verbose > 0:
+                    print("ACC: {:1.2f} - AUC: {:1.2f} - {}".format(
+                        acc, auc, params_list[-1]))
 
     return acc_list, auc_list, params_list
 
-def train_OC_SVM(samples, nu = 0.1, out_file = None):
-    svm = OneClassSVM(nu = nu, verbose = False, kernel = "sigmoid").fit(samples)
+#########################################################################################
+
+def train_OC_SVM(samples, params, out_file = None):
+    p = params.copy()
+    p.pop("OC")
+    
+    svm = OneClassSVM(verbose = False, kernel = "sigmoid", **p).fit(samples)
+    
     if out_file is not None:
         joblib.dump(svm, out_file)
 
     return svm
 
-def train_SVC(samples, labels, C = 10, out_file = None):
-    svm = SVC(C = C, kernel = "rbf", decision_function_shape = 'ovo', class_weight = 'balanced')
+def train_SVC(samples, labels, params, out_file = None):
+    svm = SVC(kernel = "rbf", decision_function_shape = 'ovo', class_weight = 'balanced', **params)
+    
     svm.fit(samples, labels)
+    
     if out_file is not None:
         joblib.dump(svm, out_file)
 
@@ -193,9 +145,21 @@ def train_Network(samples, labels, params, out_file = None):
 
     return model
 
+from sklearn.ensemble import RandomForestClassifier
+def train_RF(samples, labels, params, out_file = None):
+    model = RandomForestClassifier(**params)
+
+    model.fit(samples,labels)
+
+    if out_file is not None:
+        joblib.dump(model, out_file)
+
+    return model
+
 def test_model(samples, model, video_classification):
     prediction = model.predict(samples)
 
+    # If we don't have info about a frame (no person on scene) it's classified as normal 
     if not video_classification:    
         prediction = [1 if not samples[i].any() else prediction[i] for i in range(len(prediction))]
 

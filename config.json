@@ -1,0 +1,9 @@
+{
+    "UMN1" : {"L": 15, "t1": -5, "t2": 1, "min_motion": 0.025, "fast_threshold":20, "others":{}},
+
+    "UMN2": {"L":10, "t1":-5, "t2":1, "min_motion":0.01,"fast_threshold":3, "others":{}},
+
+    "UMN3": {"L": 20, "t1": -5, "t2": 1, "min_motion": 0.05,"fast_threshold":20, "others":{}},
+
+    "CVD": {"L":5, "t1":-5, "t2":1, "min_motion":0.05,"fast_threshold":10, "others":{}}
+}

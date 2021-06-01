@@ -2,23 +2,24 @@ import pickle
 import numba
 import numpy as np
 import cv2 as cv
-import time
 from sklearn.cluster import DBSCAN
 from collections import namedtuple
 from numba import jit
 from itertools import combinations
-
-from utils import imgContains
-from visualization import addPrediction
-from visualization import addDelaunayToImage
-from visualization import addClustersToImage
+import visualization
 
 ############# AUXILIARY FUNCTIONS #############
 
 @jit(nopython = True)
+def imgContains(img,pt):
+    return ( pt[0] > 0 and pt[0] < img.shape[1] and pt[1] > 0 and pt[1] < img.shape[0])
+
+@jit(nopython = True)
 def direction(pt0,pt1):
     dif = pt0-pt1
-    return np.arctan2(dif[1],dif[0])
+    if dif[0] == 0:
+        return np.pi/2
+    return np.arctan(dif[1]/dif[0])
 
 @jit(nopython = True)
 def difAng(v0,v1):
@@ -133,7 +134,7 @@ def getClusters(features, mini = 2, e = 10):
 def calculateMovement(features, trayectories, min_motion, erase_slow = False, t1 = -6):
     velocity_x = np.zeros(len(trayectories),dtype = numba.float64)
     velocity_y = np.zeros(len(trayectories),dtype = numba.float64)
-    #velocity = velocity_x.copy()
+    #velocity = np.zeros(len(trayectories),dtype = numba.float64)
     for i in np.arange(len(trayectories)):
         velocity_x[i] = abs(trayectories[i][t1][0]-trayectories[i][-1][0])
         velocity_y[i] = abs(trayectories[i][t1][1]-trayectories[i][-1][1])
@@ -170,12 +171,16 @@ def calculateStability(cliques, trayectories, t2 = 1):
     stability = np.zeros(len(trayectories))
     # For every tracklet
     for i in np.arange(len(trayectories)):
-        # We calculate  the change of size and shape of all the posible triangles in the clique 
+        # We calculate  the change of size and shape of all the posible triangles in the clique
+        contador = 0
         for pair in combinations(cliques[i],2):
-            old_triangle = (trayectories[i][t2],trayectories[pair[0]][-1-t2], trayectories[pair[1]][-1-t2])
-            new_triangle = (trayectories[i][-1],trayectories[pair[0]][-1], trayectories[pair[1]][-1])
-            stability[i] += distanceTriangles(old_triangle, new_triangle)
-        stability[i] = stability[i] / (len(cliques[i])+1)
+            if pair[0] in cliques[pair[1]]:
+                contador += 1
+                old_triangle = (trayectories[i][t2],trayectories[pair[0]][-1-t2], trayectories[pair[1]][-1-t2])
+                new_triangle = (trayectories[i][-1],trayectories[pair[0]][-1], trayectories[pair[1]][-1])
+                stability[i] += distanceTriangles(old_triangle, new_triangle)
+        if contador != 0:
+            stability[i] = stability[i] / contador
 
     return stability
 
@@ -250,8 +255,8 @@ def calculateUniformity(cliques, clusters, features):
     intra_cluster = np.zeros(len(uniformity))
     total_sum = 0
 
-    # For every pair of point in each clique
-   
+    # For every pair of points in each clique
+    # the distance intra-cluster, inter-cluster and the total
     for f in np.arange(len(features)):
         
         total, intra, inter = auxUniformity(np.array(cliques[f]), features, f, clusters)
@@ -277,7 +282,7 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
     
     #Algorithm for feature detection
     if "use_sift" in others:
-        # SIFT
+        # SIFT (To limit the number of features detected)
         detector = cv.SIFT_create(nfeatures = others["use_sift"])
     else:
         # FAST
@@ -287,17 +292,20 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
     # The video feed is read in as a VideoCapture object
     cap = cv.VideoCapture(video_file)
 
-    if "num_frames" in others:
+    # How many frames will be used
+    if "num_frames" in others: 
         num_frames = others["num_frames"]+L
     else:
         num_frames = int(cap.get(cv.CAP_PROP_FRAME_COUNT))
 
+    # Skip the first frames of the video
     if "skip_frames" in others:
         for i in range(others["skip_frames"]):
             video_open, prev_frame = cap.read()
             
     video_open, prev_frame = cap.read()
 
+    # For datasets with variable resolutions
     if "change_resolution" in others:
         height = others["change_resolution"]
         prev_frame = cv.resize(prev_frame, (int((prev_frame.shape[1]/prev_frame.shape[0]) * height), height))
@@ -389,14 +397,10 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
                 uniformity = calculateUniformity(cliques, clusters, prev)
                     
                 # Image representation for visualizing results
-                #addTrayectoriesToImage(trayectories,frame)
-                #addDelaunayToImage(delaunay,frame)
-                #addCliqueToImage(cliques, -1, frame,trayectories)
-                #addClustersToImage(clusters,prev,frame)
-
-                # if model is not None:
-                #     frame = addPrediction(frame,model,
-                #                       (velocity_x, velocity_y, dir_var, stability, collectiveness, conflict, density, uniformity), range_max)
+                #visualization.addTrayectoriesToImage(trayectories,frame)
+                visualization.addDelaunayToImage(delaunay,frame)
+                visualization.addCliqueToImage(cliques, -1, frame,trayectories)
+                #visualization.addClustersToImage(clusters,prev,frame)
 
             else:
                 velocity_x = np.zeros(1)
@@ -412,14 +416,15 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
             descriptores = [velocity_x, velocity_y, dir_var, stability, collectiveness, conflict, density, uniformity]
             pickle.dump(descriptores, data_file)
 
-            #cv.imshow("Crowd", frame)            
+            cv.imshow("Crowd", frame)            
 
         video_open, frame = cap.read()
         
         if video_open:
-            frame = cv.resize(frame, (int((frame.shape[1]/frame.shape[0]) * height), height))
+            if frame.shape[0] != height:
+                frame = cv.resize(frame, (int((frame.shape[1]/frame.shape[0]) * height), height))
             
-            # Calculates sparse optical flow by Lucas-Kanade method
+            # Sparse optical flow by Lucas-Kanade method
             # https://docs.opencv.org/3.0-beta/modules/video/doc/motion_analysis_and_object_tracking.html#calcopticalflowpyrlk
         
             if (it > L):
@@ -473,9 +478,9 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
             except:
                 pass
     
-    # Frames are read by intervals of 1 milliseconds. The function ends after the user presses the 'q' key
-        #if cv.waitKey(1) & 0xFF == ord('q'):
-        #   break
+        # Frames are read by intervals of 1 milliseconds. The function ends after the user presses the 'q' key
+        if cv.waitKey(1) & 0xFF == ord('q'):
+            break
 
     # The following frees up resources and closes all windows
     cap.release()

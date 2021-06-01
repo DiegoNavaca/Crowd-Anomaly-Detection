@@ -9,8 +9,6 @@ from descriptors import extract_descriptors
 
 # Extracts the descriptors of all files in a directory and saves them in separate files
 def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = 1, video_classification = False, skip_extraction = False):
-    if verbose:
-        verbose -= 1
     # The descriptors are stored in a .data file in the output directory
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -46,21 +44,21 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = 1, vide
             if video_classification:
                 labels = [gt[name]]
             else:
-                beginning, end, length = gt[name]
-                L = params["L"]
-                labels = [1 if i < (beginning-L) or i > (end-L) else -1 for i in range(length-L+1)]
+                try:
+                    beginning, end, length = gt[name]
+                    L = params["L"]
+                    labels = [1 if i < (beginning-L) or i > (end-L) else -1 for i in range(length-L+1)]
+                except TypeError:
+                    labels = [gt[name]]
             
             labels_file = open(output_dir+name+".labels","wb")
             pickle.dump(labels,labels_file)
             labels_file.close()
 
         except AssertionError:
-            if verbose:
+            if verbose and not skip_extraction:
                 print("{} is not a video".format(video))
 
-    if verbose:
-        print("Tiempo de extraccion total: {:1.3f}".format(time.time()-start))
-        
         
 # Reads the ground truth from a file
 def get_Ground_Truth(in_file):
@@ -78,7 +76,7 @@ def get_Ground_Truth(in_file):
         
     return gt
 
-# Separates the videos into their classes
+# Separates the videos into classes
 def get_Classes(in_file):
     f = open(in_file,"r")
     classes = {}
