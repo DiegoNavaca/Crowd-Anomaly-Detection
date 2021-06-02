@@ -42,15 +42,26 @@ def addClustersToImage(clusters, features, img):
         point = (int(point[0]), int(point[1]))
         cv.circle(img,point,1,colores[clusters[i]],2)
 
-def addPrediction(img,model, data, range_max, tam_border = 5):
-    histograms = [np.histogram(data[i], bins = 16, range = (0,range_max[i]))[0] for i in range(len(range_max))]
-    norms = [np.linalg.norm(h) for h in histograms]
-    histograms = [histograms[i] / norms[i] if norms[i] != 0 else histograms[i] for i in range(len(histograms))]
-    histograms = np.ravel(histograms).reshape(1,-1)
+def addPrediction(img, model, data, tam_border = 5):
+    histograms = [np.histogram(data[i], bins = model["n_bins"],
+                               range = (model["range_min"][i],model["range_max"][i]))[0]
+                  for i in range(len(model["range_max"]))]
     
-    prediction = model.predict(histograms)
+    norms = [np.linalg.norm(h) for h in histograms]
+    
+    histograms = [histograms[i] / norms[i] if norms[i] != 0 else histograms[i]
+                  for i in range(len(histograms))]
+    
+    features = np.ravel(histograms).reshape(1,-1)
+
+    if "codifier" in model:
+        features = model["codifier"].predict(features)
+    
+    prediction = model["clasiffier"].predict(features)
 
     if prediction[0] == -1:
         img = cv.copyMakeBorder(img, tam_border, tam_border, tam_border, tam_border, cv.BORDER_CONSTANT, None, (0,0,255))
+    else:
+        img = cv.copyMakeBorder(img, tam_border, tam_border, tam_border, tam_border, cv.BORDER_CONSTANT, None, (0,0,0))
 
     return img

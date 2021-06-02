@@ -24,7 +24,7 @@ def squeduler(epoch, lr):
     else:
         return lr * 0.9
 
-def train_and_Test(training, test, video_classification, params, verbose = 0):  
+def train_and_Test(training, test, video_classification, params, verbose = 0): 
     acc_list = []
     auc_list = []
     params_list = []

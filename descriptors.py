@@ -8,6 +8,9 @@ from numba import jit
 from itertools import combinations
 import visualization
 
+from joblib import load as jload
+from keras.models import load_model as kload
+
 ############# AUXILIARY FUNCTIONS #############
 
 @jit(nopython = True)
@@ -298,6 +301,17 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
     else:
         num_frames = int(cap.get(cv.CAP_PROP_FRAME_COUNT))
 
+    if "model" in others:
+        model = {"n_bins":others["model"]["n_bins"]}
+        model["clasiffier"] = jload(others["model"]["classifier"])
+        with open(others["model"]["ranges"],"rb") as f:
+            model["range_max"] = pickle.load(f)
+            model["range_min"] = pickle.load(f)
+            
+        if "codifier" in others["model"]:
+            model["codifier"] = kload(others["model"]["codifier"],compile = False)
+        
+
     # Skip the first frames of the video
     if "skip_frames" in others:
         for i in range(others["skip_frames"]):
@@ -313,7 +327,7 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
         height = prev_frame.shape[0]
 
     width = prev_frame.shape[1]
-
+    
     # Resolution related params
     clusters_e = (width+height)/50
 
@@ -398,9 +412,10 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
                     
                 # Image representation for visualizing results
                 #visualization.addTrayectoriesToImage(trayectories,frame)
-                visualization.addDelaunayToImage(delaunay,frame)
-                visualization.addCliqueToImage(cliques, -1, frame,trayectories)
+                #visualization.addDelaunayToImage(delaunay,frame)
+                #visualization.addCliqueToImage(cliques, -1, frame,trayectories)
                 #visualization.addClustersToImage(clusters,prev,frame)
+                
 
             else:
                 velocity_x = np.zeros(1)
@@ -416,7 +431,11 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
             descriptores = [velocity_x, velocity_y, dir_var, stability, collectiveness, conflict, density, uniformity]
             pickle.dump(descriptores, data_file)
 
-            cv.imshow("Crowd", frame)            
+            if "model" in others:
+                frame = visualization.addPrediction(frame, model, descriptores)
+                
+            cv.imshow("Crowd", frame)
+            
 
         video_open, frame = cap.read()
         
@@ -486,4 +505,3 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
     cap.release()
     cv.destroyAllWindows()
     data_file.close()
-
