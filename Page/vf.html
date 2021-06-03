@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <link rel="apple-touch-icon" sizes="76x76" href="../assets/img/apple-icon.png">
+  <link rel="icon" type="image/png" href="../assets/img/favicon.png">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+  <title>
+    Crowd Anomaly detection by Diego Navarro Cabrera
+  </title>
+  <meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no' name='viewport' />
+  <!--     Fonts and icons     -->
+  <link href="https://fonts.googleapis.com/css?family=Poppins:200,300,400,600,700,800" rel="stylesheet" />
+  <link href="https://use.fontawesome.com/releases/v5.0.6/css/all.css" rel="stylesheet">
+  <!-- Nucleo Icons -->
+  <link href="assets/css/nucleo-icons.css" rel="stylesheet" />
+  <!-- CSS Files -->
+  <link href="assets/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="assets/css/black-dashboard.css?v=1.0.0" rel="stylesheet" />
+  <!-- CSS Just for demo purpose, don't include it in your project -->
+  <link href="assets/demo/demo.css" rel="stylesheet" />
+</head>
+
+<body class=" ">
+  <h1 style="font-size:50px;">Detección de Anomalías en multitudes</h1>
+  <div class="wrapper ">
+    <div class="sidebar">
+      <div class="sidebar-wrapper">
+        <div class="logo">
+          <a class="simple-text">
+            Navegación
+          </a>
+        </div>
+        <ul class="nav">
+	  <li>
+            <a href="./index.html">
+              <p><b>Explicación del modelo</b></p>
+            </a>
+          </li>
+          <li>
+            <a href="./umn.html">
+              <p><b>Conjunto UMN</b></p>
+            </a>
+          </li>
+          <li class="active ">
+            <a href="./vf.html">
+              <p><b>Violent Flows</b></p>
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <div class="main-panel">
+      <!-- Navbar -->
+      <div class="modal fade" id="searchModal" tabindex="-1" role="dialog" aria-labelledby="searchModal" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <input type="text" class="form-control" id="inlineFormInputGroup" placeholder="SEARCH">
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                <i class="tim-icons icon-simple-remove"></i>
+              </button>
+            </div>
+            <div class="modal-footer">
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- End Navbar -->
+
+      <!-- Contenido -->
+
+      <div class="content">
+
+	
+	<div class="row">
+	  <div class="card">
+	    <div class="card-body">
+	      <h4 class="card-title">Descripción</h4>
+	      <p class="card-text"> Conjunto de datos para la detección de peleas. Contiene multiples vídeos en los que se pueden ver grupos de personas celebrando eventos deportivos (vídeos normales) o peleandose (anomalías). Debajo podemos ver un ejemplo de cada caso.
+	      </p>
+	    </div>
+	  </div>
+	</div>
+
+	<div class="row">
+	  <div class="col-6">
+	    <div class="card">
+	      <video class="card-img-top" src="../Examples/ejemplo_no_violencia.mp4"
+		     autoplay loop muted>
+	    </div>
+	  </div>
+	  
+	  <div class="col-6">
+	    <div class="card">
+	      <video class="card-img-top" src="../Examples/ejemplo_violencia.mp4"
+		     autoplay loop muted>
+	    </div>
+	  </div>
+	  
+	</div>
+
+	<div class="row">
+	    <div class="card">
+	      <table class="table">
+		<thead>
+		  <tr>
+		    <th class="text-center">Modelo</th>
+		    <th>Precisión</th>
+		    <th>AUC</th>
+		  </tr>
+		</thead>
+		<tbody>
+		  <tr>
+		    <td class="text-center">LMVD</td>
+		    <td>0.844</td>
+		    <td>0.880</td>
+		  </tr>
+		  <tr>
+		    <td class="text-center">Sin codificación</td>
+		    <td>0.862</td>
+		    <td>0.867</td>
+		  </tr>
+		  <tr>
+		    <td class="text-center"><b>PCA</b></td>
+		    <td><b>0.894</b></td>
+		    <td><b>0.898</b></td>
+		  </tr>
+		  <tr>
+		    <td class="text-center">Autoencoder</td>
+		    <td>0.870</td>
+		    <td>0.870</td>
+		  </tr>
+		</tbody>
+	      </table>
+	    </div>
+	  </div>
+	</div>
+	
+      </div>	
+	
+      </div>
+
+      <!-- Parte baja -->
+      </div>
+      <footer class="footer">
+        <div class="container-fluid">
+          <nav>
+            <ul>
+              <li>
+                <a href="https://github.com/DiegoNavaca/Crowd-Anomaly-Detection">
+                  Repositorio
+                </a>
+              </li>
+              <li>
+                <a href="https://github.com/DiegoNavaca">
+                  Autor
+                </a>
+              </li>
+            </ul>
+          </nav>
+      </footer>
+      </div>
+</div>
+
+    <!-- Control Center for Black Dashboard: parallax effects, scripts for the example pages etc -->
+    <script src="assets/js/black-dashboard.min.js?v=1.0.0" type="text/javascript"></script>
+</body>
+
+</html>

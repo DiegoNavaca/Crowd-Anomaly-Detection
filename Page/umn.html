@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <link rel="apple-touch-icon" sizes="76x76" href="../assets/img/apple-icon.png">
+  <link rel="icon" type="image/png" href="../assets/img/favicon.png">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+  <title>
+    Crowd Anomaly detection by Diego Navarro Cabrera
+  </title>
+  <meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no' name='viewport' />
+  <!--     Fonts and icons     -->
+  <link href="https://fonts.googleapis.com/css?family=Poppins:200,300,400,600,700,800" rel="stylesheet" />
+  <link href="https://use.fontawesome.com/releases/v5.0.6/css/all.css" rel="stylesheet">
+  <!-- Nucleo Icons -->
+  <link href="assets/css/nucleo-icons.css" rel="stylesheet" />
+  <!-- CSS Files -->
+  <link href="assets/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="assets/css/black-dashboard.css?v=1.0.0" rel="stylesheet" />
+  <!-- CSS Just for demo purpose, don't include it in your project -->
+  <link href="assets/demo/demo.css" rel="stylesheet" />
+</head>
+
+<body class=" ">
+  <h1 style="font-size:50px;">Detección de Anomalías en multitudes</h1>
+  <div class="wrapper ">
+      
+    <div class="sidebar">
+      <div class="sidebar-wrapper">
+        <div class="logo">
+          <a class="simple-text">
+            Navegación
+          </a>
+        </div>
+        <ul class="nav">
+	  <li>
+            <a href="./index.html">
+              <p><b>Explicación del modelo</b></p>
+            </a>
+          </li>
+          <li class="active ">
+            <a href="./umn.html">
+              <p><b>Conjunto UMN</b></p>
+            </a>
+          </li>
+          <li>
+            <a href="./vf.html">
+              <p><b>Violent Flows</b></p>
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <div class="main-panel">
+      <!-- Navbar -->
+      <div class="modal fade" id="searchModal" tabindex="-1" role="dialog" aria-labelledby="searchModal" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <input type="text" class="form-control" id="inlineFormInputGroup" placeholder="SEARCH">
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                <i class="tim-icons icon-simple-remove"></i>
+              </button>
+            </div>
+            <div class="modal-footer">
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- End Navbar -->
+
+      <!-- Contenido -->
+
+      <div class="content">
+
+	
+	<div class="row">
+	  <div class="card">
+	    <div class="card-body">
+	      <h4 class="card-title">Descripción</h4>
+	      <p class="card-text"> Conjunto de datos de deteccion de escenas de pánico. Un grupo de personas camina y actúa de manera normal hasta que reciben una señal y echan a correr.
+	      </p>
+	    </div>
+	  </div>
+	</div>
+	
+	<div class="row">
+	  
+	  <div class="col-6">
+	    <div class="card">
+	      <video class="card-img-top" src="../Examples/Ejemplo Escena 1.mp4"
+		   autoplay loop>
+	    </div>
+	  </div>
+
+	  <div class="col-6">
+	    <div class="card">
+	      <video class="card-img-top" src="../Examples/Ejemplo Escena 3.mp4"
+		   autoplay loop>
+	    </div>
+	  </div>
+	  
+	</div>
+
+	<div class="row">
+	  <div class="card">
+	    <div class="card-body">
+	      <p class="card-text">Vídeos de ejemplo sacados de la escena 1 (izquierda) y la escena 3 (derecha). Detección de la anomalía representada con un <b>borde rojo</b> cuando esta se produce. Esta detección se ha obtenido usando un modelo con <b>autoencoder</b> entrenado con el resto de vídeos de la escena correspondiente.</p>
+	    </div>
+	  </div>
+	</div>
+
+	<div class="row">
+	  <div class="col-6">
+	    <div class="card">
+	      <table class="table">
+		<thead>
+		  <tr>
+		    <th class="text-center">Modelo</th>
+		    <th>Precisión</th>
+		    <th>AUC</th>
+		  </tr>
+		</thead>
+		<tbody>
+		  <tr>
+		    <td class="text-center"><b>LMVD</b></td>
+		    <td>n/a</td>
+		    <td><b>0.996</b></td>
+		  </tr>
+		  <tr>
+		    <td class="text-center">Sin codificación</td>
+		    <td>0.990</td>
+		    <td>0.987</td>
+		  </tr>
+		  <tr>
+		    <td class="text-center">PCA</td>
+		    <td>0.988</td>
+		    <td>0.974</td>
+		  </tr>
+		  <tr>
+		    <td class="text-center">Autoencoder</td>
+		    <td>0.979</td>
+		    <td>0.967</td>
+		  </tr>
+		</tbody>
+	      </table>
+	      <div class="card-body">
+		<p class="card-text"> Comparación de resultados <b>escena 1</b>.<br> *<i>LMVD es el modelo de referencia citado en la memoria</i>.</p>
+	      </div>
+	    </div>
+	  </div>
+	  
+	  <div class="col-6">
+	    <div class="card">
+	      <table class="table">
+		<thead>
+		  <tr>
+		    <th class="text-center">Modelo</th>
+		    <th>Precisión</th>
+		    <th>AUC</th>
+		  </tr>
+		</thead>
+		<tbody>
+		  <tr>
+		    <td class="text-center">LMVD</td>
+		    <td>n/a</td>
+		    <td>0.975</td>
+		  </tr>
+		  <tr>
+		    <td class="text-center">Sin codificación</td>
+		    <td>0.987</td>
+		    <td>0.973</td>
+		  </tr>
+		  <tr>
+		    <td class="text-center">PCA</td>
+		    <td>0.986</td>
+		    <td>0.972</td>
+		  </tr>
+		  <tr>
+		    <td class="text-center"><b>Autoencoder</b></td>
+		    <td>0.984</td>
+		    <td><b>0.984</b></td>
+		  </tr>
+		</tbody>
+	      </table>
+	      <div class="card-body">
+		<p class="card-text"> Comparación de resultados de la <b>escena 3</b>.</p>
+	      </div>
+	    </div>
+	  </div>
+	</div>
+
+	<div class="row">
+	  
+	  
+	  <div class="col-4">
+	    <div class="card">
+	      <video class="card-img-top" src="../Examples/Ejemplo Escena 2 bien (0,975).mp4"
+		   autoplay loop>
+	    </div>
+	  </div>
+
+	  
+	  <div class="col-4">
+	    <div class="card">
+	      <video class="card-img-top" src="../Examples/Ejemplo Escena 2 mal (0,895).mp4"
+		   autoplay loop>
+	    </div>
+	  </div>
+
+	  <div class="col-4">
+	    <div class="card">
+	      <table class="table">
+		<thead>
+		  <tr>
+		    <th class="text-center">Modelo</th>
+		    <th>Precisión</th>
+		    <th>AUC</th>
+		  </tr>
+		</thead>
+		<tbody>
+		  <tr>
+		    <td class="text-center"><b>LMVD</b></td>
+		    <td>n/a</td>
+		    <td><b>0.986</b></td>
+		  </tr>
+		  <tr>
+		    <td class="text-center">Sin codificación</td>
+		    <td>0.961</td>
+		    <td>0.943</td>
+		  </tr>
+		  <tr>
+		    <td class="text-center">PCA</td>
+		    <td>0.952</td>
+		    <td>0.944</td>
+		  </tr>
+		  <tr>
+		    <td class="text-center">Autoencoder</td>
+		    <td>0.957</td>
+		    <td>0.946</td>
+		  </tr>
+		</tbody>
+	      </table>
+	      <div class="card-body">
+		<p class="card-text"> Comparación de resultados de la <b>escena 2</b>.</p>
+	      </div>
+	      </div>
+	  </div>
+	  
+	</div>
+
+	<div class="row">
+	  <div class="card">
+	    <div class="card-body">
+	      <p class="card-text">Dados los resultados obtenidos en esta escena se considera importante mostrar 2 ejemplos de funcionamiento distintos. A la <b>izquierda</b> vemos el vídeo sobre el que se ha obtenido una <b>mejor</b> AUC durante la etapa de validación cruzada (0.975). A la <b>derecha</b> vemos el que ha obtenido una <b>peor</b> calificación (0.895). En ambos se aprecia un comportamiento similar, pero mientras en el primero todos los sujetos salen del plano de la cámara, en el segundo algunos se mueven hacia el fondo del pasillo y dejan de correr, haciendo que sea muy complicado determinar claramente cuando se produce el final de la anomalía y desembocando en una peor precisión. Cabe destacar que se desconoce el <i>ground truth</i> exacto usado por el modelo LMVD por lo que es difícil comparar los resultados fielmente.</p>
+	    </div>
+	  </div>
+	</div>
+	
+      </div>	
+	
+      </div>
+
+      <!-- Parte baja -->
+      <footer class="footer">
+        <div class="container-fluid">
+          <nav>
+            <ul>
+              <li>
+                <a href="https://github.com/DiegoNavaca/Crowd-Anomaly-Detection">
+                  Repositorio
+                </a>
+              </li>
+              <li>
+                <a href="https://github.com/DiegoNavaca">
+                  Autor
+                </a>
+              </li>
+            </ul>
+          </nav>
+      </footer>
+      </div>
+</div>
+
+    <!-- Control Center for Black Dashboard: parallax effects, scripts for the example pages etc -->
+    <script src="assets/js/black-dashboard.min.js?v=1.0.0" type="text/javascript"></script>
+</body>
+
+</html>
