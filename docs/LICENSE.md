@@ -1,4 +1,4 @@
-Todo lo contenido en esta carpeta se encuentra bajo la siguiente licencia:
+Todo lo contenido en esta carpeta (a excepción de la carpeta Examples) se encuentra bajo la siguiente licencia:
 
 MIT License
 
