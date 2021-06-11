@@ -17,30 +17,39 @@ def try_Dataset(dataset, descriptors_dir, video_dir, params, tam_test, verbose =
     gt = get_Ground_Truth("Datasets/"+dataset+"/ground_truth.txt")
 
     start = time.time()
+    
+    # We extract the descriptors of all videos in the dataset
     extract_Descriptors_Dir(params["extraction"], video_dir, descriptors_dir,
                             gt, verbose, is_video_classification, skip_extraction)
+    
     if verbose > 0 and not skip_extraction:
         print("Tiempo de extraccion total: {:1.3f}".format(time.time()-start))
 
     names = [name[:-5] for name in glob.glob(descriptors_dir+"*.data")]
-    if "OC" in params["training"]:
-        if is_video_classification:
-            normal_videos = [name for name in names if gt[name.split("/")[-1]] == 1]
-            anomalies = [name for name in names if gt[name.split("/")[-1]] == -1]
-        else:
-            print("Funcionalidad no implementada")
-            return 0,0,{}
+    
+    if "OC" in params["training"] and is_video_classification:
+        # If we are goint to classify videos with a one-class model we
+        # split normal and anomalous videos
+        normal_videos = [name for name in names if gt[name.split("/")[-1]] == 1]
+        anomalies = [name for name in names if gt[name.split("/")[-1]] == -1]
     else:
         np.random.shuffle(names)
-        
+
+    # We calculate the number of folds we are going to do
     n_folds = ceil(len(names)/tam_test)
+    
+    # We calculate the number of model we are going to test
     n_pruebas = reduce(mul, [len(params["training"][x]) for x in params["training"]], 1)*len(params["bins"])*len(params["code_size"])    
     
     average_acc = np.zeros(n_pruebas)
     average_auc = np.zeros(n_pruebas)
+    
     for i in range(n_folds):
+        
         start = time.time()
-        if "OC" in params["training"]:
+
+        # We determine test and training sets
+        if "OC" in params["training"] and is_video_classification:
             np.random.shuffle(normal_videos)
             training = normal_videos[:(len(normal_videos)//2)+1]
             test = anomalies + normal_videos[(len(normal_videos)//2)+1:]
@@ -78,7 +87,12 @@ def try_UMN(escena, params, verbose = 2, skip_extraction = True):
 
     if params["extraction"] is None:
         conf = open("config.json")
-        params["extraction"] = load(conf)["UMN"+str(escena)]
+        params["extraction"] = load(conf)["UMN"+str(escena)+"_des"]
+        conf.close()
+
+    if params["autoencoder"] is None:
+        conf = open("config.json")
+        params["autoencoder"] = load(conf)["UMN_encoder"]
         conf.close()
 
     acc, auc, best_params = try_Dataset("UMN", descriptors_dir, video_dir, params,
@@ -98,7 +112,12 @@ def try_CVD(params, verbose = 2, skip_extraction = True):
 
     if params["extraction"] is None:
         conf = open("config.json")
-        params["extraction"] = load(conf)["CVD"]
+        params["extraction"] = load(conf)["CVD_des"]
+        conf.close()
+
+    if params["autoencoder"] is None:
+        conf = open("config.json")
+        params["autoencoder"] = load(conf)["CVD_encoder"]
         conf.close()
 
     acc, auc, best_params = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir, params, 50, verbose-1, is_video_classification = True, skip_extraction = skip_extraction)
@@ -117,17 +136,18 @@ def try_CVD(params, verbose = 2, skip_extraction = True):
 
 if __name__ == "__main__":
     params_extraction = None
-    params_autoencoder = {"activation":"relu","dropout":0.3,"batch_norm":True,
-                    'extra_class_layers': 0, 'extra_encoder_layers': 1,
-                    'extra_decoder_layers': 1, "class_loss":"kl_divergence",
-                    "classifier_act":"softmax"}
-    params_training = {"C":[1,4,16,32,64,128]}
+    
+    params_autoencoder = None
+    
+    params_training = {"C":[1,4,16,32,64,128,200,256]}
+    #params_training = {"OC":[True],"nu":[0.05,0.025,0.01,0.005,0.001],"kernel":["sigmoid","rbf"]}
+    
     params = {"extraction":params_extraction, "autoencoder":params_autoencoder,
-              "training":params_training, "bins":[16],
-              "code_size":[None], "n_parts":1}    
+              "training":params_training, "bins":[400],
+              "code_size":[64,100,150,200], "n_parts":1}    
 
-    acc, auc, best_params = try_UMN(2,params, verbose = 3, skip_extraction = True)
-    #acc, auc, best_params = try_CVD(params, verbose = 3, skip_extraction = True)
+    #acc, auc, best_params = try_UMN(2,params, verbose = 3, skip_extraction = True)
+    acc, auc, best_params = try_CVD(params, verbose = 3, skip_extraction = True)
 
 
 ################################ Resultados ################################
@@ -140,7 +160,7 @@ if __name__ == "__main__":
 # {'n_bins': 64, 'code_size': 0.95, 'C': 4}
 # Accuracy: 0.988
 # AUC: 0.971
-# {'n_bins': 200, 'code_size': 64, 'C': 64}
+# {'n_bins': 200, 'code_size': 128, 'C': 64}
 # Accuracy: 0.979
 # AUC: 0.967
 
@@ -163,9 +183,9 @@ if __name__ == "__main__":
 # {'n_bins': 128, 'code_size': 0.95, 'C': 1}
 # Accuracy: 0.952
 # AUC: 0.944
-# {'n_bins': 200, 'code_size': 128, 'C': 1}
-# Accuracy: 0.957
-# AUC: 0.946
+# {'n_bins': 200, 'code_size': 64, 'C': 1}
+# Accuracy: 0.960
+# AUC: 0.949
 
 # Nº frames: 546, 681, 765, 576, 891, 666 = 4125
 # Umbral, ACC, AUC, Tiempo, fps
@@ -215,7 +235,7 @@ if __name__ == "__main__":
 # Accuracy: 0.894
 # AUC: 0.898
 
-# code_size: 250 bins: 150
+# code_size: 250 bins: 100
 # Accuracy: 0.870
 # AUC: 0.870
 

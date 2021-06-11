@@ -9,7 +9,7 @@ from itertools import product
 from sklearn.decomposition import PCA
 
 from keras.losses import MeanSquaredError
-from keras.metrics import BinaryAccuracy
+#from keras.metrics import BinaryAccuracy
 from keras.metrics import AUC
 from keras.callbacks import EarlyStopping
 from keras.callbacks import LearningRateScheduler
@@ -21,40 +21,45 @@ from data import prepare_Hist_and_Labels
 def squeduler(epoch, lr):
     if epoch < 10:
         return lr
-    else:
-        return lr * 0.9
+    return lr * 0.9
 
-def train_and_Test(training, test, video_classification, params, verbose = 0): 
+def train_and_Test(training, test, is_video_classification, params, verbose = 0): 
     acc_list = []
     auc_list = []
     params_list = []
 
-    range_max, range_min = get_Range_Descriptors(training, video_classification)
+    # We calculate the ranges of the histograms 
+    range_max, range_min = get_Range_Descriptors(training, is_video_classification)
 
     for n_bins in params["bins"]:
-        original_hist, original_labels = prepare_Hist_and_Labels(training, range_max,range_min, video_classification, n_bins, params.get("eliminar_descriptores",[]), eliminar_vacios = True, n_parts = params["n_parts"])
+        hist, labels = prepare_Hist_and_Labels(training, range_max,range_min, is_video_classification, n_bins, params.get("eliminar_descriptores",[]), eliminar_vacios = True, n_parts = params["n_parts"])
         
-        original_test_hist, labels_test = prepare_Hist_and_Labels(test, range_max,range_min,video_classification, n_bins, params.get("eliminar_descriptores",[]), n_parts = params["n_parts"])
+        test_hist, labels_test = prepare_Hist_and_Labels(test, range_max,range_min,is_video_classification, n_bins, params.get("eliminar_descriptores",[]), n_parts = params["n_parts"])
+
+        # If we want to use one-class models when classifing frames we
+        #have to move all anomalous frames to the test set
+        if not is_video_classification and "OC" in params["training"]:
+            test_hist = np.concatenate((test_hist,hist[labels==-1]))
+            labels_test = np.concatenate((labels_test,labels[labels==-1]))
+            hist = hist[labels==1]
 
         for code_size in params["code_size"]:
-
-            # Keep size of the features
-            if code_size is None:
-                hist = original_hist.copy()
-                hist_test = original_test_hist.copy()
-
+            # Not use dimmensionality reduction
+            if code_size == None:
+                code = hist.copy()
+                test_code = test_hist.copy()
             # Use a PCA for dimensionality reduction
             elif code_size < 1.0:
                 pca = PCA(n_components=code_size)
-                #pca.fit([original_hist[i] for i in range(len(original_hist)) if original_labels[i] != -1])
-                pca.fit(original_hist)
-                hist = pca.transform(original_hist)
-                hist_test = pca.transform(original_test_hist)
-
+                pca.fit(hist)
+                code = pca.transform(hist)
+                test_code = pca.transform(test_hist)
             # Use an autoencoder for dimensionality reduction
             else:
-                labels = np.array([[1,0] if label == 1 else [0,1] for label in original_labels])
-                autoencoder = Autoencoder(len(original_hist[0]), code_size, params["autoencoder"])
+                coder_labels = np.array([[1,0] if l == 1 else [0,1] for l in labels])
+                
+                # Model definition and compilation
+                autoencoder = Autoencoder(len(hist[0]), code_size, params["autoencoder"])
                 class_loss = params["autoencoder"]["class_loss"]
                 autoencoder.compile(optimizer = 'adam',
                                     loss = {"output_2":MeanSquaredError(),
@@ -64,44 +69,50 @@ def train_and_Test(training, test, video_classification, params, verbose = 0):
                 ES = EarlyStopping(monitor = 'val_output_1_loss',
                                             patience = 10, restore_best_weights = True)
                 lrs = LearningRateScheduler(squeduler)
-                
-                history = autoencoder.fit(original_hist,{"output_2":original_hist,
-                        "output_1":labels},verbose = 0, epochs = 100,
+
+                # We train the model
+                history = autoencoder.fit(hist,{"output_2":hist,
+                        "output_1":coder_labels},verbose = 0, epochs = 100,
                         validation_split = 0.2, callbacks = [ES,lrs])
+                
                 if verbose > 0:
                     print("Autoencoder: AUCtrain: {:1.3f}\t AUCval {:1.3f}".format(
-                        history.history['output_1_auc'][-1],history.history['val_output_1_auc'][-1]))
-                hist = autoencoder.encoder.predict(original_hist)
-                hist_test = autoencoder.encoder.predict(original_test_hist)
+                        history.history['output_1_auc'][-1],
+                        history.history['val_output_1_auc'][-1]))
 
+                # We apply the model to encode the inputs
+                code = autoencoder.encoder.predict(hist)
+                test_code = autoencoder.encoder.predict(test_hist)
+
+            # We calculate all the permutations of parameters for the classifier
             keys, values = zip(*params["training"].items())
             param_permutations = [dict(zip(keys, v)) for v in product(*values)]
 
+            # For each permutation we train and test the model
             for model_params in param_permutations:
                 if "auto" in params["training"]:
                     model = autoencoder.classifier_model
                 elif "C" in params["training"]:
-                    model = train_SVC(hist,original_labels, model_params)
+                    model = train_SVC(code,labels, model_params)
                 elif "OC" in params["training"]:
-                    model = train_OC_SVM(hist,model_params)
+                    model = train_OC_SVM(code,model_params)
                 elif "hidden_layer_sizes" in params["training"]:
-                    model = train_Network(hist, original_labels, model_params)
+                    model = train_Network(code, labels, model_params)
                 elif "n_estimators" in params["training"]:
-                    model = train_RF(hist,original_labels, model_params)
+                    model = train_RF(code,labels, model_params)
             
-                prediction = test_model(hist_test, model, video_classification)
+                prediction = test_model(test_code, model, is_video_classification)
+
+                # If we use the autoencoder classifier we have to translate the labels
                 if "auto" in params["training"]:
                     prediction = [1 if p[0] > p[1] else -1 for p in prediction]
 
                 acc = accuracy_score(labels_test,prediction)
-                try:
-                    auc = roc_auc_score(labels_test,prediction)
-                except:
-                    auc = acc
-                
+                auc = roc_auc_score(labels_test,prediction)
+
+                # We save the result and the parameters used
                 params_list.append(dict({"n_bins":n_bins,"code_size":code_size},
                                         **model_params))
-                
                 acc_list.append(acc)
                 auc_list.append(auc)
                     
@@ -117,7 +128,7 @@ def train_OC_SVM(samples, params, out_file = None):
     p = params.copy()
     p.pop("OC")
     
-    svm = OneClassSVM(verbose = False, kernel = "sigmoid", **p).fit(samples)
+    svm = OneClassSVM(verbose = False, **p).fit(samples)
     
     if out_file is not None:
         joblib.dump(svm, out_file)
@@ -156,11 +167,11 @@ def train_RF(samples, labels, params, out_file = None):
 
     return model
 
-def test_model(samples, model, video_classification):
+def test_model(samples, model, is_video_classification):
     prediction = model.predict(samples)
 
     # If we don't have info about a frame (no person on scene) it's classified as normal 
-    if not video_classification:    
+    if not is_video_classification:    
         prediction = [1 if not samples[i].any() else prediction[i] for i in range(len(prediction))]
 
     return prediction

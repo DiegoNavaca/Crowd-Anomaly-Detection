@@ -1,9 +1,19 @@
 {
-    "UMN1" : {"L": 15, "t1": -5, "t2": 1, "min_motion": 0.025, "fast_threshold":20, "others":{}},
+    "UMN1_des" : {"L": 15, "t1": -5, "t2": 1, "min_motion": 0.025, "fast_threshold":20, "others":{}},
 
-    "UMN2": {"L":10, "t1":-5, "t2":1, "min_motion":0.01,"fast_threshold":3, "others":{}},
+    "UMN2_des": {"L":10, "t1":-5, "t2":1, "min_motion":0.01,"fast_threshold":3, "others":{}},
 
-    "UMN3": {"L": 20, "t1": -5, "t2": 1, "min_motion": 0.05,"fast_threshold":20, "others":{}},
+    "UMN3_des": {"L": 20, "t1": -5, "t2": 1, "min_motion": 0.05,"fast_threshold":20, "others":{}},
 
-    "CVD": {"L":5, "t1":-5, "t2":1, "min_motion":0.05,"fast_threshold":10, "others":{}}
+    "UMN_encoder" : {"activation":"elu","dropout":0.3,"batch_norm":1,
+                     "extra_class_layers": 0, "extra_encoder_layers": 1,
+                   "extra_decoder_layers": 1, "class_loss":"kl_divergence",
+                   "classifier_act":"softmax"},
+
+    "CVD_des": {"L":5, "t1":-5, "t2":1, "min_motion":0.05,"fast_threshold":10, "others":{}},
+
+    "CVD_encoder" : {"activation":"elu","dropout":0.3,"batch_norm":1,
+                     "extra_class_layers": 0, "extra_encoder_layers": 1,
+                     "extra_decoder_layers": 1, "class_loss":"kl_divergence",
+                     "classifier_act":"softmax"}
 }

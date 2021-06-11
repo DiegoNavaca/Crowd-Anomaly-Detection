@@ -46,22 +46,27 @@ def get_Range_Descriptors(files, is_video_classification, n_descriptors = 8):
 
 # Returns the normalized histograms of a set of descriptors
 def get_Histograms(des_file, range_max, range_min, n_bins, eliminar_descriptores):
-    
     f = open(des_file+".data", "rb")
+
     histograms = [[] for i in np.arange(len(range_max))]
     vacios = []
     k = 0
+    
     while True:
         try:
             descriptores = pickle.load(f)
             if len(descriptores[0]) > 1:
                 for i, d in enumerate(descriptores):
-                    
+                    # We can remove descriptors to test how the model
+                    # behaves without them
                     if i in eliminar_descriptores:
                         h = np.zeros(n_bins)
                     else:
-                        h = np.histogram(d, bins = n_bins, range = (range_min[i],range_max[i]))[0]
-                        
+                        # Creation of the histogram
+                        h = np.histogram(d, bins = n_bins,
+                                         range = (range_min[i],range_max[i]))[0]
+
+                    # Normalization of the histogram
                     norm = np.linalg.norm(h)
                     
                     if norm != 0:

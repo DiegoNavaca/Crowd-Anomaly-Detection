@@ -281,11 +281,12 @@ def calculateUniformity(cliques, clusters, features):
 ############# MAIN FUNCTION #############
 
 # Function to extract the descriptors of a video
-def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, out_file = "descriptors", min_puntos = 10, others = {}):
+def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold,
+                        out_file = "descriptors", min_puntos = 10, others = {}):
     
     #Algorithm for feature detection
     if "use_sift" in others:
-        # SIFT (To limit the number of features detected)
+        # SIFT (If we want to limit the number of features detected)
         detector = cv.SIFT_create(nfeatures = others["use_sift"])
     else:
         # FAST
@@ -322,7 +323,8 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
     # For datasets with variable resolutions
     if "change_resolution" in others:
         height = others["change_resolution"]
-        prev_frame = cv.resize(prev_frame, (int((prev_frame.shape[1]/prev_frame.shape[0]) * height), height))
+        prev_frame = cv.resize(prev_frame,
+                    (int((prev_frame.shape[1]/prev_frame.shape[0]) * height), height))
     else:
         height = prev_frame.shape[0]
 
@@ -381,12 +383,8 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
             #Metrics analysis
             if len(trayectories) > 0:
                 arr_trayectories = np.array(trayectories)
-                velocity_x, velocity_y, prev, arr_trayectories = calculateMovement(prev,arr_trayectories,
-                                                                                   min_motion*(-t1), t1 = t1, erase_slow = True)
-                # if len(prev) > max_num_features and max_num_features != -1:
-                #     print("Limite sobrepasado {}".format(len(prev)))
-                #     velocity_x, velocity_y, prev, arr_trayectories = filter_fast_features(velocity_x, velocity_y,
-                #                                                                           prev, arr_trayectories, max_num_features)
+                velocity_x, velocity_y, prev, arr_trayectories = calculateMovement(prev,
+                        arr_trayectories,min_motion*(-t1), t1 = t1, erase_slow = True)
                 trayectories = arr_trayectories.tolist()                
 
             if len(prev) > min_puntos:
@@ -403,7 +401,8 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
                 
                 # Interactive Behaviours
                 stability = calculateStability(cliques,arr_trayectories)
-                collectiveness, conflict = calculateCollectivenessAndConflict(cliques,arr_trayectories, t1 = t1)
+                collectiveness, conflict = calculateCollectivenessAndConflict(cliques,
+                                                            arr_trayectories, t1 = t1)
                 density = calculateDensity(cliques,prev)
                 
                 clusters = getClusters(prev, e = clusters_e)
@@ -428,7 +427,8 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
                 uniformity = np.zeros(1)
 
             # We save the data into a file
-            descriptores = [velocity_x, velocity_y, dir_var, stability, collectiveness, conflict, density, uniformity]
+            descriptores = [velocity_x, velocity_y, dir_var, stability, collectiveness,
+                            conflict, density, uniformity]
             pickle.dump(descriptores, data_file)
 
             if "model" in others:
@@ -441,14 +441,15 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
         
         if video_open:
             if frame.shape[0] != height:
-                frame = cv.resize(frame, (int((frame.shape[1]/frame.shape[0]) * height), height))
+                frame = cv.resize(frame,
+                                (int((frame.shape[1]/frame.shape[0]) * height), height))
             
             # Sparse optical flow by Lucas-Kanade method
             # https://docs.opencv.org/3.0-beta/modules/video/doc/motion_analysis_and_object_tracking.html#calcopticalflowpyrlk
         
             if (it > L):
                 try:
-                    nex, status, _ = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev, None)
+                    nex,status,_= cv.calcOpticalFlowPyrLK(prev_frame, frame, prev, None)
                     _, status, _ = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex, prev)
                     
                     # Selects good feature points for previous position
@@ -468,12 +469,15 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
                     # Updates previous good feature points
                     prev = good_new.reshape(-1, 1, 2)
 
+                # Sometimes videos have black frames which causes errors
                 except:
                     pass
 
             try:
-                nex_aux, status_aux, _ = cv.calcOpticalFlowPyrLK(prev_frame, frame, prev_aux, None)
-                _, status_aux, _ = cv.calcOpticalFlowPyrLK(frame, prev_frame, nex_aux, prev_aux)
+                nex_aux, status_aux, _ = cv.calcOpticalFlowPyrLK(prev_frame,
+                                                                 frame, prev_aux, None)
+                _, status_aux, _ = cv.calcOpticalFlowPyrLK(frame,
+                                                           prev_frame, nex_aux, prev_aux)
         
                 # Selects good feature points for previous position
                 for i in np.arange(len(status_aux)-1, -1, -1):
@@ -494,6 +498,7 @@ def extract_descriptors(video_file, L , t1 , t2 , min_motion , fast_threshold, o
 
                 # Updates previous frame
                 prev_frame = frame.copy()
+
             except:
                 pass
     
