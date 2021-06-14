@@ -1,0 +1,10 @@
+~pencv_contrib_python==4.4.0.42
+~atplotlib==3.3.1
+numba==0.51.2
+joblib==0.16.0
+~umpy==1.19.1
+optuna==2.6.0
+Keras==2.4.3
+matplotlib==3.4.2
+numpy==1.20.3
+scikit_learn==0.24.2
