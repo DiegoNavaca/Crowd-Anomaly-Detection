@@ -1,5 +1,7 @@
 # Crowd-Anomaly-Detection
-Detección de anomalías de multitudes usando descriptores locales.
+Modelo de aprendizaje automático para detectar anomalías en vídeos de multitudes. Ha sido probado para la detección de peleas y escenas de pánico.
+En la memoria adjunta puede encontrar más información sobre el funcionamiento y los resultados obtenidos. 
+También se dispone de una página web en la que se muestran los resultados, y que es accesible a través del siguiente enlace: https://diegonavaca.github.io/Crowd-Anomaly-Detection.
 
 Los archivos se dividen de la siguiente manera:
 ### descriptors.py
@@ -34,7 +36,4 @@ archivos con los parámetros adecuados para cada conjunto de datos.
 ### optimize_params.py
 Contiene la información relacionada con el uso
 de Optuna para el diseño del autoencoder.
-
-Más información sobre el funcionamiento y los resultados obtenidos en la memoria adjunta 
-y en la página web accesible a través del siguiente enlace: https://diegonavaca.github.io/Crowd-Anomaly-Detection.
 
