@@ -2,7 +2,6 @@ import glob
 import time
 import numpy as np
 
-from math import ceil
 from operator import mul
 from functools import reduce
 from json import load
@@ -11,7 +10,7 @@ from files import extract_Descriptors_Dir
 from files import get_Ground_Truth
 from models import train_and_Test
 
-def try_Dataset(dataset, descriptors_dir, video_dir, params, tam_test, verbose = 2, is_video_classification = False, skip_extraction = True):
+def try_Dataset(dataset, descriptors_dir, video_dir, params, n_folds, verbose = 2, is_video_classification = False, skip_extraction = True):
     np.random.seed(5)
     
     gt = get_Ground_Truth("Datasets/"+dataset+"/ground_truth.txt")
@@ -27,16 +26,22 @@ def try_Dataset(dataset, descriptors_dir, video_dir, params, tam_test, verbose =
 
     names = [name[:-5] for name in glob.glob(descriptors_dir+"*.data")]
     
-    if "OC" in params["training"] and is_video_classification:
-        # If we are goint to classify videos with a one-class model we
-        # split normal and anomalous videos
-        normal_videos = [name for name in names if gt[name.split("/")[-1]] == 1]
-        anomalies = [name for name in names if gt[name.split("/")[-1]] == -1]
+    if "OC" in params["training"]:
+        if is_video_classification:
+            # If we are goint to classify videos with a one-class model we
+            # split normal and anomalous videos
+            normal_videos = [name for name in names if gt[name.split("/")[-1]] == 1]
+            anomalies = [name for name in names if gt[name.split("/")[-1]] == -1]
+        else:
+            training = [name for name in names
+                        if gt[name.split("/")[-1]][1] == gt[name.split("/")[-1]][2]]
+            test = [name for name in names if name not in training]
+
     else:
         np.random.shuffle(names)
 
     # We calculate the number of folds we are going to do
-    n_folds = ceil(len(names)/tam_test)
+    tam_test = int(len(names)/n_folds)
     
     # We calculate the number of model we are going to test
     n_pruebas = reduce(mul, [len(params["training"][x]) for x in params["training"]], 1)*len(params["bins"])*len(params["code_size"])    
@@ -49,13 +54,13 @@ def try_Dataset(dataset, descriptors_dir, video_dir, params, tam_test, verbose =
         start = time.time()
 
         # We determine test and training sets
-        if "OC" in params["training"] and is_video_classification:
-            np.random.shuffle(normal_videos)
-            training = normal_videos[:(len(normal_videos)//2)+1]
-            test = anomalies + normal_videos[(len(normal_videos)//2)+1:]
-        else:
+        if "OC" not in params["training"]:
             test = names[i*tam_test:i*tam_test+tam_test]
             training = names[:i*tam_test]+names[i*tam_test+tam_test:]
+        elif is_video_classification:
+            np.random.shuffle(normal_videos)
+            training = normal_videos[:int(len(normal_videos)*0.75)+1]
+            test = anomalies + normal_videos[int(len(normal_videos)*0.75)+1:]
 
         acc, auc, list_params = train_and_Test(training, test, is_video_classification, params, verbose = verbose-1)
         
@@ -96,7 +101,7 @@ def try_UMN(escena, params, verbose = 2, skip_extraction = True):
         conf.close()
 
     acc, auc, best_params = try_Dataset("UMN", descriptors_dir, video_dir, params,
-                                        1, verbose-1, skip_extraction = skip_extraction)
+                                        len(glob.glob(descriptors_dir+"*.data")), verbose-1, skip_extraction = skip_extraction)
 
     if verbose > 0:
         print("RESULTADOS:")
@@ -120,7 +125,7 @@ def try_CVD(params, verbose = 2, skip_extraction = True):
         params["autoencoder"] = load(conf)["CVD_encoder"]
         conf.close()
 
-    acc, auc, best_params = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir, params, 50, verbose-1, is_video_classification = True, skip_extraction = skip_extraction)
+    acc, auc, best_params = try_Dataset("Crowd Violence Detection", descriptors_dir, video_dir, params, 5, verbose-1, is_video_classification = True, skip_extraction = skip_extraction)
 
     if verbose > 0:
         print("RESULTADOS:")
@@ -128,6 +133,35 @@ def try_CVD(params, verbose = 2, skip_extraction = True):
         print("Accuracy: {:1.3f}".format(acc))
         print("AUC: {:1.3f}".format(auc))
     
+    return acc, auc, best_params
+
+def try_UMN_OC(escena, params, verbose = 2, skip_extraction = True):
+    descriptors_dir = "Descriptors/UMN/OC/Escena "+str(escena)+"/"
+    video_dir = "Datasets/UMN/One-Class/Escena "+str(escena)+"/"
+
+    if params["extraction"] is None:
+        conf = open("config.json")
+        params["extraction"] = load(conf)["UMN"+str(escena)+"_des"]
+        conf.close()
+
+    if params["autoencoder"] is None:
+        conf = open("config.json")
+        params["autoencoder"] = load(conf)["UMN_encoder"]
+        conf.close()
+
+    params["training"] = {"OC":["True"],"nu":[0.4,0.3,0.2,0.1,0.05,0.025,0.01],
+                          "kernel":["sigmoid","rbf"], "gamma":["auto","scale"]}
+
+    acc, auc, best_params = try_Dataset("UMN/One-Class", descriptors_dir, video_dir,
+                                        params, 1, verbose-1,
+                                        skip_extraction = skip_extraction)
+
+    if verbose > 0:
+        print("RESULTADOS:")
+        print(best_params)
+        print("Accuracy: {:1.3f}".format(acc))
+        print("AUC: {:1.3f}".format(auc))
+
     return acc, auc, best_params
 
 ############################################################################
@@ -139,18 +173,26 @@ if __name__ == "__main__":
     
     params_autoencoder = None
     
-    params_training = {"C":[1,4,16,32,64,128,200,256]}
-    #params_training = {"OC":[True],"nu":[0.05,0.025,0.01,0.005,0.001],"kernel":["sigmoid","rbf"]}
+    params_training = {"OC":["True"],"nu":[0.4,0.3,0.2,0.1,0.05,0.025,0.01],
+                          "kernel":["sigmoid","rbf"], "gamma":["auto","scale"]}
     
     params = {"extraction":params_extraction, "autoencoder":params_autoencoder,
-              "training":params_training, "bins":[400],
-              "code_size":[64,100,150,200], "n_parts":1}    
+              "training":params_training, "bins":[16,32,64],
+              "code_size":[None], "n_parts":1}
 
-    #acc, auc, best_params = try_UMN(2,params, verbose = 3, skip_extraction = True)
+    #acc, auc, best_params = try_UMN_OC(1,params, verbose = 3, skip_extraction = True)
+    ########## Cambiar model a 1 ###########
     acc, auc, best_params = try_CVD(params, verbose = 3, skip_extraction = True)
 
 
 ################################ Resultados ################################
+
+# One-class: SC,    PCA,   Autoencoder
+# Escena 1:  0.867, 0.938, 0.933
+# Escena 2:  0.716, 0.754, 0.818
+# Escena 3:  0.926, 0.963, 0.956
+# CVD:       0.674, 0.563, 0.667
+# CVD 0.75:  0.699, 0.617, 0.644
 
 # Escena 1
 # {'L': 15, 't1': -5, 't2': 1, 'min_motion': 0.025, 'fast_threshold': 20}

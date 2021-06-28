@@ -8,7 +8,8 @@ import cv2 as cv
 from descriptors import extract_descriptors
 
 # Extracts the descriptors of all files in a directory and saves them in separate files
-def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = 1, video_classification = False, skip_extraction = False):
+def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = 1,
+                            video_classification = False, skip_extraction = False):
     # The descriptors are stored in a .data file in the output directory
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -27,7 +28,7 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = 1, vide
             data_file = output_dir+name+".data"
             if not skip_extraction:
                 if verbose:
-                    print("{} - {}".format(i,video))
+                    print("{} - {}".format(i, video))
 
                 # We delete the file if it already exists
                 if os.path.exists(data_file):
@@ -54,36 +55,36 @@ def extract_Descriptors_Dir(params, input_dir, output_dir, gt, verbose = 1, vide
                 except TypeError:
                     labels = [gt[name]]
             
-            labels_file = open(output_dir+name+".labels","wb")
-            pickle.dump(labels,labels_file)
+            labels_file = open(output_dir+name+".labels", "wb")
+            pickle.dump(labels, labels_file)
             labels_file.close()
 
         except AssertionError:
             if verbose and not skip_extraction:
                 print("{} is not a video".format(video))
 
-        
+
 # Reads the ground truth from a file
 def get_Ground_Truth(in_file):
-    f = open(in_file,"r")
+    f = open(in_file, "r")
     gt = {}
     for line in f:
         lista = line.split(",")
-        
+
         if len(lista) > 2:
             # name: (beginning anomaly, end anomaly, length video)
-            gt[lista[0]] = (int(lista[1]),int(lista[2]), int(lista[3]))
+            gt[lista[0]] = (int(lista[1]), int(lista[2]), int(lista[3]))
         else:
             # name: classification of the whole video
             gt[lista[0]] = int(lista[1])
 
     f.close()
-        
+
     return gt
 
 # Reads the labels from a file
 def read_Labels(labels_file):
-    f = open(labels_file,"rb")
+    f = open(labels_file, "rb")
     labels = pickle.load(f)
     f.close()
 

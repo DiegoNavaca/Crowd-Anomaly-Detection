@@ -23,7 +23,7 @@ def squeduler(epoch, lr):
         return lr
     return lr * 0.9
 
-def train_and_Test(training, test, is_video_classification, params, verbose = 0): 
+def train_and_Test(training, test, is_video_classification, params, verbose = 0):
     acc_list = []
     auc_list = []
     params_list = []
@@ -35,13 +35,6 @@ def train_and_Test(training, test, is_video_classification, params, verbose = 0)
         hist, labels = prepare_Hist_and_Labels(training, range_max,range_min, is_video_classification, n_bins, params.get("eliminar_descriptores",[]), eliminar_vacios = True, n_parts = params["n_parts"])
         
         test_hist, labels_test = prepare_Hist_and_Labels(test, range_max,range_min,is_video_classification, n_bins, params.get("eliminar_descriptores",[]), n_parts = params["n_parts"])
-
-        # If we want to use one-class models when classifing frames we
-        #have to move all anomalous frames to the test set
-        if not is_video_classification and "OC" in params["training"]:
-            test_hist = np.concatenate((test_hist,hist[labels==-1]))
-            labels_test = np.concatenate((labels_test,labels[labels==-1]))
-            hist = hist[labels==1]
 
         for code_size in params["code_size"]:
             # Not use dimmensionality reduction
@@ -66,7 +59,7 @@ def train_and_Test(training, test, is_video_classification, params, verbose = 0)
                                             "output_1":class_loss},
                                     metrics = {"output_1":AUC(name='auc')})
 
-                ES = EarlyStopping(monitor = 'val_output_1_loss',
+                ES = EarlyStopping(monitor = 'val_output_2_loss', # CAMBIAR A 1
                                             patience = 10, restore_best_weights = True)
                 lrs = LearningRateScheduler(squeduler)
 
@@ -93,22 +86,20 @@ def train_and_Test(training, test, is_video_classification, params, verbose = 0)
                 if "auto" in params["training"]:
                     model = autoencoder.classifier_model
                 elif "C" in params["training"]:
-                    model = train_SVC(code,labels, model_params)
+                    model = train_SVC(code, labels, model_params)
                 elif "OC" in params["training"]:
-                    model = train_OC_SVM(code,model_params)
+                    model = train_OC_SVM(code, model_params)
                 elif "hidden_layer_sizes" in params["training"]:
                     model = train_Network(code, labels, model_params)
-                elif "n_estimators" in params["training"]:
-                    model = train_RF(code,labels, model_params)
-            
+
                 prediction = test_model(test_code, model, is_video_classification)
 
                 # If we use the autoencoder classifier we have to translate the labels
                 if "auto" in params["training"]:
                     prediction = [1 if p[0] > p[1] else -1 for p in prediction]
 
-                acc = accuracy_score(labels_test,prediction)
-                auc = roc_auc_score(labels_test,prediction)
+                acc = accuracy_score(labels_test, prediction)
+                auc = roc_auc_score(labels_test, prediction)
 
                 # We save the result and the parameters used
                 params_list.append(dict({"n_bins":n_bins,"code_size":code_size},
@@ -127,9 +118,9 @@ def train_and_Test(training, test, is_video_classification, params, verbose = 0)
 def train_OC_SVM(samples, params, out_file = None):
     p = params.copy()
     p.pop("OC")
-    
+
     svm = OneClassSVM(verbose = False, **p).fit(samples)
-    
+
     if out_file is not None:
         joblib.dump(svm, out_file)
 
@@ -156,22 +147,11 @@ def train_Network(samples, labels, params, out_file = None):
 
     return model
 
-from sklearn.ensemble import RandomForestClassifier
-def train_RF(samples, labels, params, out_file = None):
-    model = RandomForestClassifier(**params)
-
-    model.fit(samples,labels)
-
-    if out_file is not None:
-        joblib.dump(model, out_file)
-
-    return model
-
 def test_model(samples, model, is_video_classification):
     prediction = model.predict(samples)
 
-    # If we don't have info about a frame (no person on scene) it's classified as normal 
-    if not is_video_classification:    
+    # If we don't have info about a frame (no person on scene) it's classified as normal
+    if not is_video_classification:
         prediction = [1 if not samples[i].any() else prediction[i] for i in range(len(prediction))]
 
     return prediction
