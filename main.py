@@ -101,7 +101,7 @@ def try_UMN(escena, params, verbose = 2, skip_extraction = True):
         conf.close()
 
     acc, auc, best_params = try_Dataset("UMN", descriptors_dir, video_dir, params,
-                                        len(glob.glob(descriptors_dir+"*.data")), verbose-1, skip_extraction = skip_extraction)
+                                        len(glob.glob(video_dir+"*.data")), verbose-1, skip_extraction = skip_extraction)
 
     if verbose > 0:
         print("RESULTADOS:")
@@ -135,6 +135,9 @@ def try_CVD(params, verbose = 2, skip_extraction = True):
     
     return acc, auc, best_params
 
+# Use this function to test the one-class classifier in the UMN set
+# To test it on the CVD dataset you only have to change the training parameters
+# as seen below and use its usual function.
 def try_UMN_OC(escena, params, verbose = 2, skip_extraction = True):
     descriptors_dir = "Descriptors/UMN/OC/Escena "+str(escena)+"/"
     video_dir = "Datasets/UMN/One-Class/Escena "+str(escena)+"/"
@@ -149,6 +152,8 @@ def try_UMN_OC(escena, params, verbose = 2, skip_extraction = True):
         params["autoencoder"] = load(conf)["UMN_encoder"]
         conf.close()
 
+    # The training parameters are different from those of the binary classifier.
+    # The "OC" parameter indicates that a single-class classifier is to be used.
     params["training"] = {"OC":["True"],"nu":[0.4,0.3,0.2,0.1,0.05,0.025,0.01],
                           "kernel":["sigmoid","rbf"], "gamma":["auto","scale"]}
 
@@ -173,16 +178,15 @@ if __name__ == "__main__":
     
     params_autoencoder = None
     
-    params_training = {"OC":["True"],"nu":[0.4,0.3,0.2,0.1,0.05,0.025,0.01],
-                          "kernel":["sigmoid","rbf"], "gamma":["auto","scale"]}
+    params_training = {"C":[1,4,8,16,32,64,128]}
     
     params = {"extraction":params_extraction, "autoencoder":params_autoencoder,
               "training":params_training, "bins":[16,32,64],
               "code_size":[None], "n_parts":1}
 
-    #acc, auc, best_params = try_UMN_OC(1,params, verbose = 3, skip_extraction = True)
-    ########## Cambiar model a 1 ###########
-    acc, auc, best_params = try_CVD(params, verbose = 3, skip_extraction = True)
+    acc, auc, best_params = try_UMN(escena = 1, params = params, verbose = 3,
+                                    skip_extraction = False)
+    #acc, auc, best_params = try_CVD(params, verbose = 3, skip_extraction = False)
 
 
 ################################ Resultados ################################
@@ -191,8 +195,7 @@ if __name__ == "__main__":
 # Escena 1:  0.867, 0.938, 0.933
 # Escena 2:  0.716, 0.754, 0.818
 # Escena 3:  0.926, 0.963, 0.956
-# CVD:       0.674, 0.563, 0.667
-# CVD 0.75:  0.699, 0.617, 0.644
+# CVD     :  0.699, 0.617, 0.644
 
 # Escena 1
 # {'L': 15, 't1': -5, 't2': 1, 'min_motion': 0.025, 'fast_threshold': 20}

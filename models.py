@@ -59,7 +59,7 @@ def train_and_Test(training, test, is_video_classification, params, verbose = 0)
                                             "output_1":class_loss},
                                     metrics = {"output_1":AUC(name='auc')})
 
-                ES = EarlyStopping(monitor = 'val_output_2_loss', # CAMBIAR A 1
+                ES = EarlyStopping(monitor = 'val_output_1_loss',
                                             patience = 10, restore_best_weights = True)
                 lrs = LearningRateScheduler(squeduler)
 
