@@ -101,7 +101,7 @@ def try_UMN(escena, params, verbose = 2, skip_extraction = True):
         conf.close()
 
     acc, auc, best_params = try_Dataset("UMN", descriptors_dir, video_dir, params,
-                                        len(glob.glob(video_dir+"*.data")), verbose-1, skip_extraction = skip_extraction)
+                                        len(glob.glob(video_dir+"*")), verbose-1, skip_extraction = skip_extraction)
 
     if verbose > 0:
         print("RESULTADOS:")
