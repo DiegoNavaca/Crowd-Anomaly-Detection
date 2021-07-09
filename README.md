@@ -37,3 +37,14 @@ archivos con los parámetros adecuados para cada conjunto de datos.
 Contiene la información relacionada con el uso
 de Optuna para el diseño del autoencoder.
 
+## Cómo usar un modelo entrenado.
+Para aplicar un modelo entrenado a un vídeo se debe incluir un diccionario en "others" con la clave "model". Este modelo será cargado al inicio de la función "extract_descriptors" y se usará para colocar un borde rojo alrededor de los fotogramas anómalos del vídeo que se esté procesando.
+El diccionario deberá contener los siguientes parámetros: 
+#### "n_bins"
+El número de divisiones de los histogramas.
+#### "ranges"
+El nombre del archivo en el que esten guardados los rangos de los histogramas, primero los valores máximos de todos ellos y luego los mínimos.
+#### "classiffier"
+El nombre del archivo en el que se guarda el SVM ya entrenado.
+#### "codifier"
+Opcionalmente se puede añadir el nombre del archivo en el que se guarda el autoencoder ya entrenado.
